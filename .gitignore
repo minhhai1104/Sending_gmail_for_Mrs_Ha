@@ -1,0 +1,25 @@
+# === Dữ liệu cá nhân (chứa mật khẩu Gmail) ===
+Cau_hinh.xlsx
+Lich_su_gui.csv
+
+# === File tạm Excel ===
+~$*.xlsx
+
+# === Python cache ===
+__pycache__/
+*.pyc
+
+# === Build artifacts ===
+build/
+Ban_phat_hanh/
+*.spec
+
+# === Thư mục file đính kèm (dữ liệu riêng) ===
+Dinh_kem/
+
+# === Windows ===
+desktop.ini
+Thumbs.db
+
+# === Tài liệu không liên quan ===
+document.docx
