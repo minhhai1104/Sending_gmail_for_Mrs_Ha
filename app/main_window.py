@@ -7,7 +7,7 @@ from datetime import date
 from tkinter import messagebox, scrolledtext, ttk
 from typing import Callable, Optional
 
-from . import history
+from . import __version__, history
 from .config import CONFIG_PATH, Config, ConfigError, ensure_config_file, load_config
 from .mailer import MailError, SendResult, send_plans, test_connection
 from .planner import KIND_DRAFT, KIND_FINAL, MailPlan, build_plans, resolve_attach_dir
@@ -23,7 +23,7 @@ _POLL_MS = 100
 class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Gửi mail hàng loạt cho nhà cung cấp")
+        self.title(f"Gửi mail hàng loạt cho nhà cung cấp v{__version__}")
         self.geometry("780x620")
         self.minsize(700, 520)
 
