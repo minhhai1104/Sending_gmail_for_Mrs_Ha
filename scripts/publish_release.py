@@ -1,9 +1,10 @@
-"""Kịch bản tự động kiểm thử, mã hóa OTA token, đóng gói, đẩy Git tag và xuất bản GitHub Release OTA."""
+"""Kịch bản tự động kiểm thử, mã hóa OTA token, đóng gói trên ổ SSD cục bộ, kiểm chứng PKG archive & phát hành GitHub Release."""
 import argparse
 import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,17 @@ def _sha256(path: Path) -> str:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest().lower()
+
+
+def _verify_pyinstaller_exe(exe_path: Path) -> int:
+    """Kiểm chứng cổng toàn vẹn PKG Archive của PyInstaller (chống lỗi thiếu COOKIE magic trên Google Drive)."""
+    from PyInstaller.archive.readers import CArchiveReader
+
+    arch = CArchiveReader(str(exe_path))
+    entries = len(arch.toc)
+    if entries <= 0:
+        raise RuntimeError(f"PKG archive rỗng trong file {exe_path}")
+    return entries
 
 
 def _provision_embedded_ota_token() -> bool:
@@ -105,6 +117,37 @@ def _bump_version_files(new_ver: str) -> None:
         )
 
 
+def _build_executables_safely() -> None:
+    """Build trên ổ SSD cục bộ (%TEMP%) rồi copy nguyên tử sang Ban_phat_hanh để tránh Google Drive làm hỏng PKG archive."""
+    work_base = Path(tempfile.gettempdir()) / "gmail_mailer_build"
+    local_dist = work_base / "dist"
+    local_dist.mkdir(parents=True, exist_ok=True)
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
+
+    _run([
+        sys.executable, "-m", "PyInstaller", "updater.spec",
+        "--noconfirm", "--clean", "--distpath", str(local_dist),
+        "--workpath", str(work_base / "updater"),
+    ])
+    _run([
+        sys.executable, "-m", "PyInstaller", "Gui_mail_nha_cung_cap.spec",
+        "--noconfirm", "--clean", "--distpath", str(local_dist),
+        "--workpath", str(work_base / "main"),
+    ])
+
+    local_main = local_dist / "Gui_mail_nha_cung_cap.exe"
+    local_upd = local_dist / "updater.exe"
+    n_main = _verify_pyinstaller_exe(local_main)
+    n_upd = _verify_pyinstaller_exe(local_upd)
+    print(f"✔ Kiểm chứng PKG archive trên SSD cục bộ thành công (Main: {n_main} mục, Updater: {n_upd} mục).")
+
+    shutil.copy2(local_main, DIST_DIR / "Gui_mail_nha_cung_cap.exe")
+    shutil.copy2(local_upd, DIST_DIR / "updater.exe")
+    _verify_pyinstaller_exe(DIST_DIR / "Gui_mail_nha_cung_cap.exe")
+    _verify_pyinstaller_exe(DIST_DIR / "updater.exe")
+    print("✔ Đã sao chép và xác thực PKG archive trong Ban_phat_hanh/ hợp lệ 100%.")
+
+
 def _package_ota_zip(version: str) -> tuple[Path, Path, str]:
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     main_exe = DIST_DIR / "Gui_mail_nha_cung_cap.exe"
@@ -118,6 +161,10 @@ def _package_ota_zip(version: str) -> tuple[Path, Path, str]:
 
     if not main_exe.is_file() or not upd_exe.is_file():
         raise RuntimeError("Thiếu file thực thi trong Ban_phat_hanh/. Hãy chạy với --build.")
+
+    # Bắt buộc kiểm chứng PKG archive hợp lệ trước khi cho phép nén vào file .zip
+    _verify_pyinstaller_exe(main_exe)
+    _verify_pyinstaller_exe(upd_exe)
 
     zip_path = DIST_DIR / f"Gui_mail_nha_cung_cap_v{version}.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -156,49 +203,41 @@ def main() -> int:
     tag = f"v{version}"
     print(f"=== Chuẩn bị phát hành phiên bản {tag} ===")
 
-    # 0. Provision encrypted OTA token (.ota_token.dat) for Private Repo access
     if _provision_embedded_ota_token():
         print("✔ Đã mã hóa và nhúng GitHub OTA Token vào .ota_token.dat (hỗ trợ Private Repo).")
 
-    # 1. Quality Gate
     _run([sys.executable, "-m", "ruff", "check", "app", "tests", "main.py", "updater_runner.py"])
     _run([sys.executable, "-m", "mypy", "app", "main.py", "updater_runner.py"])
     _run([sys.executable, "-m", "pytest", "tests/test_app.py", "-v"])
 
-    # 2. Build executables if requested or missing
     main_exe = DIST_DIR / "Gui_mail_nha_cung_cap.exe"
     upd_exe = DIST_DIR / "updater.exe"
-    if args.build or not main_exe.is_file() or not upd_exe.is_file():
-        work_base = Path(tempfile.gettempdir()) / "gmail_mailer_build"
-        _run([
-            sys.executable, "-m", "PyInstaller", "updater.spec",
-            "--noconfirm", "--clean", "--distpath", str(DIST_DIR),
-            "--workpath", str(work_base / "updater"),
-        ])
-        _run([
-            sys.executable, "-m", "PyInstaller", "Gui_mail_nha_cung_cap.spec",
-            "--noconfirm", "--clean", "--distpath", str(DIST_DIR),
-            "--workpath", str(work_base / "main"),
-        ])
+    need_build = args.build or not main_exe.is_file() or not upd_exe.is_file()
+    if not need_build:
+        try:
+            _verify_pyinstaller_exe(main_exe)
+            _verify_pyinstaller_exe(upd_exe)
+        except Exception:
+            need_build = True
 
-    # 3. Package OTA zip & SHA-256
+    if need_build:
+        _build_executables_safely()
+
     zip_path, version_json, zip_hash = _package_ota_zip(version)
     print(f"✔ Đã đóng gói {zip_path.name} (SHA-256: {zip_hash})")
 
-    # 4. Git commit, tag & push
     _run(["git", "add", "-A"])
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=str(ROOT), text=True, capture_output=True
     ).stdout.strip()
     if status:
-        commit_msg = f"release: {tag} — {args.notes or 'Cap nhat phien ban moi va ho tro OTA Private Repo Token'}"
+        commit_msg = f"release: {tag} — {args.notes or 'Cap nhat phien ban moi va kiem chung toan ven PKG archive'}"
         _run(["git", "commit", "-m", commit_msg])
 
     _run(["git", "tag", "-f", tag])
     _run(["git", "push", "origin", "HEAD"])
     _run(["git", "push", "origin", tag, "--force"])
 
-    # 5. Publish GitHub Release via gh CLI
     notes_body = (
         f"### Bản phát hành {tag} — Gmail Auto Mailer (Haesung Vina)\n\n"
         f"{args.notes or '- Nâng cấp bảo mật Hybrid App Password, SQLite history.db, Smart Pacing, Mẫu Email HTML + Logo CID và Tự động cập nhật OTA 2 tiến trình (hỗ trợ Private Repo Token).'}\n\n"
