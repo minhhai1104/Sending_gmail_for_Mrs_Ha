@@ -1,4 +1,4 @@
-"""Mô-đun tự động cập nhật OTA qua GitHub Releases theo kiến trúc 2 tiến trình (Launcher/Updater + App)."""
+"""Mô-đun tự động cập nhật OTA qua GitHub Releases (hỗ trợ cả Public & Private Repo có Token)."""
 import hashlib
 import hmac
 import json
@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from . import __version__
-from .config import APP_DIR
+from . import __version__, security
+from .config import APP_DIR, DEFAULT_VAULT_PATH
 
 GITHUB_REPO = "minhhai1104/Sending_gmail_for_Mrs_Ha"
 CHUNK_SIZE = 64 * 1024
@@ -31,6 +31,7 @@ PROTECTED_USER_ITEMS: frozenset[str] = frozenset(
         "Lich_su_gui.csv",
         "Lich_su_gui.xlsx",
         ".credentials.dat",
+        ".ota_token.dat",
         "Dinh_kem",
         "logo.png",
     }
@@ -51,6 +52,7 @@ class ReleaseInfo:
     release_notes: str
     asset_name: str
     published_at: str = ""
+    api_asset_url: str = ""
 
 
 def parse_version(version_str: str) -> tuple[int, ...]:
@@ -77,21 +79,55 @@ def _is_protected_path(rel_path: Path) -> bool:
     return False
 
 
+def resolve_github_token(
+    explicit_token: Optional[str] = None,
+    vault_path: Optional[Path] = None,
+) -> str:
+    """Giải quyết GitHub Token để xác thực OTA (từ tham số, biến môi trường, Vault, hoặc bản nhúng .exe)."""
+    if explicit_token and explicit_token.strip():
+        return explicit_token.strip()
+
+    env_tok = (
+        os.environ.get("GMAIL_MAILER_GH_TOKEN")
+        or os.environ.get("GITHUB_TOKEN")
+        or ""
+    ).strip()
+    if env_tok:
+        return env_tok
+
+    active_vault = vault_path if vault_path is not None else DEFAULT_VAULT_PATH
+    vault_tok = security.load_github_token(
+        vault_path=active_vault,
+        use_os_keyring=(vault_path is None),
+    )
+    if vault_tok:
+        return vault_tok
+
+    embedded_tok = security.load_embedded_ota_token()
+    if embedded_tok:
+        return embedded_tok
+
+    return ""
+
+
 def check_for_update(
     current_version: str = __version__,
     repo: str = GITHUB_REPO,
     api_url: Optional[str] = None,
     timeout: float = 5.0,
+    token: Optional[str] = None,
 ) -> Optional[ReleaseInfo]:
-    """Kiểm tra bản phát hành mới nhất từ GitHub Releases API. Trả về None nếu đã ở bản mới nhất."""
+    """Kiểm tra bản phát hành mới nhất từ GitHub Releases API (hỗ trợ Private Repo có Token)."""
     url = api_url or f"https://api.github.com/repos/{repo}/releases/latest"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": f"GmailAutoMailer-Updater/{current_version}",
-        },
-    )
+    active_token = resolve_github_token(token)
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": f"GmailAutoMailer-Updater/{current_version}",
+    }
+    if active_token:
+        headers["Authorization"] = f"Bearer {active_token}"
+
+    req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
@@ -130,7 +166,9 @@ def check_for_update(
     if chosen_asset is None:
         return None
 
-    download_url = str(chosen_asset.get("browser_download_url") or "").strip()
+    browser_url = str(chosen_asset.get("browser_download_url") or "").strip()
+    api_asset_url = str(chosen_asset.get("url") or "").strip()
+    download_url = browser_url or api_asset_url
     asset_name = str(chosen_asset.get("name") or f"update_v{clean_ver}.zip").strip()
     if not download_url:
         return None
@@ -142,6 +180,7 @@ def check_for_update(
         release_notes=body,
         asset_name=asset_name,
         published_at=published_at,
+        api_asset_url=api_asset_url,
     )
 
 
@@ -171,23 +210,36 @@ def download_release_asset(
     dest_dir: Path,
     on_progress: Optional[Callable[[int, int], None]] = None,
     timeout: float = 30.0,
+    token: Optional[str] = None,
 ) -> Path:
-    """Tải gói cập nhật về `dest_dir` qua HTTPS và kiểm tra cổng toàn vẹn SHA-256."""
-    if not release.download_url.lower().startswith("https://"):
+    """Tải gói cập nhật về `dest_dir` qua HTTPS (hỗ trợ Private Repo Asset API) và kiểm tra SHA-256."""
+    active_token = resolve_github_token(token)
+    # Với Private Repo có Token, sử dụng API Asset URL với Accept: application/octet-stream
+    target_url = (
+        release.api_asset_url
+        if (active_token and release.api_asset_url)
+        else release.download_url
+    )
+
+    if not target_url.lower().startswith("https://"):
         raise UpdateError("Đường dẫn tải bản cập nhật bắt buộc phải dùng giao thức bảo mật HTTPS.")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     safe_name = Path(release.asset_name or f"update_v{release.version}.zip").name
     dest_path = dest_dir / safe_name
 
-    req = urllib.request.Request(
-        release.download_url,
-        headers={"User-Agent": f"GmailAutoMailer-Updater/{release.version}"},
-    )
+    headers = {"User-Agent": f"GmailAutoMailer-Updater/{release.version}"}
+    if active_token and (
+        release.api_asset_url or "api.github.com" in target_url.lower()
+    ):
+        headers["Authorization"] = f"Bearer {active_token}"
+        headers["Accept"] = "application/octet-stream"
+
+    req = urllib.request.Request(target_url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            headers = getattr(resp, "headers", {}) or {}
-            total_bytes = int(headers.get("Content-Length") or 0)
+            resp_headers = getattr(resp, "headers", {}) or {}
+            total_bytes = int(resp_headers.get("Content-Length") or 0)
             downloaded = 0
             with open(dest_path, "wb") as out_file:
                 while True:
@@ -350,5 +402,5 @@ def spawn_standalone_updater(
         args,
         cwd=str(target_dir),
         creationflags=creation_flags,
-         close_fds=True,
+        close_fds=True,
     )

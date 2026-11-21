@@ -1,4 +1,4 @@
-"""Quản lý bảo mật Mật khẩu ứng dụng Gmail (Hybrid Zero-Plaintext Vault)."""
+"""Quản lý bảo mật Mật khẩu ứng dụng Gmail & GitHub OTA Token (Hybrid Zero-Plaintext Vault)."""
 import base64
 import hashlib
 import hmac
@@ -7,12 +7,18 @@ import os
 import platform
 import re
 import secrets
+import sys
 from pathlib import Path
 from typing import Optional
 
 SAVED_PLACEHOLDER = "******** (Đã lưu an toàn trên máy)"
 KEYRING_SERVICE = "GmailAutoMailer_HaesungVina"
+GITHUB_TOKEN_VAULT_KEY = "__github_ota_token__"
+OTA_TOKEN_FILENAME = ".ota_token.dat"
 _APP_PASS_RE = re.compile(r"^[A-Za-z0-9]{16}$")
+_PORTABLE_OTA_SECRET = hashlib.sha256(
+    b"GmailAutoMailer::OTA::PortableTokenKey::HaesungVina::2026"
+).digest()
 
 
 def normalize_app_password(raw: str) -> str:
@@ -48,8 +54,7 @@ def _xor_keystream(data: bytes, key: bytes, nonce: bytes) -> bytes:
     return bytes(out)
 
 
-def _encrypt_payload(plaintext: str) -> str:
-    secret = _machine_secret()
+def _encrypt_with_secret(plaintext: str, secret: bytes) -> str:
     nonce = secrets.token_bytes(16)
     key = hashlib.pbkdf2_hmac("sha256", secret, nonce, 10_000)
     cipher = _xor_keystream(plaintext.encode("utf-8"), key, nonce)
@@ -57,17 +62,69 @@ def _encrypt_payload(plaintext: str) -> str:
     return base64.urlsafe_b64encode(nonce + mac + cipher).decode("ascii")
 
 
-def _decrypt_payload(token: str) -> str:
+def _decrypt_with_secret(token: str, secret: bytes) -> str:
     raw = base64.urlsafe_b64decode(token.encode("ascii"))
     if len(raw) < 48:
         raise ValueError("Invalid vault token")
     nonce, mac, cipher = raw[:16], raw[16:48], raw[48:]
-    secret = _machine_secret()
     key = hashlib.pbkdf2_hmac("sha256", secret, nonce, 10_000)
     expected_mac = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
     if not hmac.compare_digest(mac, expected_mac):
         raise ValueError("Vault integrity check failed")
     return _xor_keystream(cipher, key, nonce).decode("utf-8")
+
+
+def _encrypt_payload(plaintext: str) -> str:
+    return _encrypt_with_secret(plaintext, _machine_secret())
+
+
+def _decrypt_payload(token: str) -> str:
+    return _decrypt_with_secret(token, _machine_secret())
+
+
+def encrypt_portable_token(raw_token: str) -> str:
+    """Mã hóa GitHub OTA Token để nhúng an toàn vào gói phân phối .exe (không lưu plaintext)."""
+    return _encrypt_with_secret(raw_token.strip(), _PORTABLE_OTA_SECRET)
+
+
+def decrypt_portable_token(cipher_token: str) -> str:
+    """Giải mã GitHub OTA Token được nhúng trong gói phân phối .exe."""
+    return _decrypt_with_secret(cipher_token.strip(), _PORTABLE_OTA_SECRET)
+
+
+def save_embedded_ota_token(raw_token: str, target_path: Path) -> bool:
+    """Lưu GitHub OTA Token đã mã hóa vào file `.ota_token.dat` để đóng gói kèm .exe."""
+    clean = (raw_token or "").strip()
+    if not clean:
+        return False
+    try:
+        target_path.write_text(encrypt_portable_token(clean), encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+def load_embedded_ota_token(custom_path: Optional[Path] = None) -> str:
+    """Đọc và giải mã GitHub OTA Token từ `.ota_token.dat` (trong thư mục app hoặc bundle .exe)."""
+    candidates: list[Path] = []
+    if custom_path is not None:
+        candidates.append(custom_path)
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / OTA_TOKEN_FILENAME)
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / OTA_TOKEN_FILENAME)
+    candidates.append(Path(__file__).resolve().parent.parent / OTA_TOKEN_FILENAME)
+
+    for path in candidates:
+        if path.is_file():
+            try:
+                cipher = path.read_text(encoding="utf-8").strip()
+                if cipher:
+                    return decrypt_portable_token(cipher)
+            except Exception:
+                continue
+    return ""
 
 
 def _read_vault(vault_path: Path) -> dict[str, str]:
@@ -141,6 +198,50 @@ def load_password(
             pw = keyring.get_password(KEYRING_SERVICE, sender_key)
             if pw:
                 return normalize_app_password(pw)
+        except Exception:
+            pass
+    return ""
+
+
+def save_github_token(
+    token: str,
+    vault_path: Optional[Path] = None,
+    use_os_keyring: bool = False,
+) -> bool:
+    """Lưu GitHub Personal Access Token vào kho bảo mật."""
+    clean = (token or "").strip()
+    if not clean or clean == SAVED_PLACEHOLDER:
+        return False
+    saved = False
+    if vault_path is not None:
+        records = _read_vault(vault_path)
+        records[GITHUB_TOKEN_VAULT_KEY] = clean
+        saved = _write_vault(vault_path, records)
+    if use_os_keyring:
+        try:
+            import keyring
+            keyring.set_password(KEYRING_SERVICE, GITHUB_TOKEN_VAULT_KEY, clean)
+            saved = True
+        except Exception:
+            pass
+    return saved
+
+
+def load_github_token(
+    vault_path: Optional[Path] = None,
+    use_os_keyring: bool = False,
+) -> str:
+    """Đọc GitHub Personal Access Token từ kho bảo mật của máy."""
+    if vault_path is not None:
+        records = _read_vault(vault_path)
+        if GITHUB_TOKEN_VAULT_KEY in records:
+            return records[GITHUB_TOKEN_VAULT_KEY]
+    if use_os_keyring:
+        try:
+            import keyring
+            tok = keyring.get_password(KEYRING_SERVICE, GITHUB_TOKEN_VAULT_KEY)
+            if tok:
+                return tok.strip()
         except Exception:
             pass
     return ""

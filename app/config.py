@@ -14,8 +14,10 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from .security import (
     SAVED_PLACEHOLDER,
     is_valid_app_password,
+    load_github_token,
     load_password,
     normalize_app_password,
+    save_github_token,
     save_password,
 )
 from .templating import VARIABLES
@@ -39,6 +41,7 @@ LBL_PASSWORD = "Mật khẩu ứng dụng Gmail"
 LBL_ATTACH_DIR = "Thư mục chứa file đính kèm"
 LBL_CC = "CC chung (không bắt buộc)"
 LBL_LOGO = "Logo chữ ký (không bắt buộc)"
+LBL_GITHUB_TOKEN = "GitHub Token cập nhật OTA (không bắt buộc)"
 LBL_SUBJECT = "Tiêu đề mail"
 LBL_BODY = "Nội dung mail"
 LBL_EXCEL = "Tên file Excel đính kèm"
@@ -70,6 +73,7 @@ class Settings:
     attach_dir: str
     cc: list[str] = field(default_factory=list)
     logo_path: str = ""
+    github_token: str = ""
 
     def problems(self) -> list[str]:
         """Các lỗi cấu hình Gmail khiến không thể gửi mail."""
@@ -163,15 +167,15 @@ def _read_suppliers(ws: Any) -> list[Supplier]:
     return suppliers
 
 
-def _mask_password_in_excel(path: Path) -> None:
-    """Thay mật khẩu thô trong file Excel bằng chuỗi đánh dấu đã lưu an toàn."""
+def _mask_label_in_excel(path: Path, target_label: str) -> None:
+    """Thay mật khẩu/token thô trong file Excel bằng chuỗi đánh dấu đã lưu an toàn."""
     wb = None
     try:
         wb = load_workbook(path)
         if SHEET_GMAIL in wb.sheetnames:
             ws = wb[SHEET_GMAIL]
             for row in range(1, ws.max_row + 1):
-                if _cell_text(ws.cell(row=row, column=1).value) == LBL_PASSWORD:
+                if _cell_text(ws.cell(row=row, column=1).value) == target_label:
                     ws.cell(row=row, column=2, value=SAVED_PLACEHOLDER)
                     wb.save(path)
                     break
@@ -212,6 +216,7 @@ def load_config(
 
     sender = _require(gmail, LBL_SENDER, SHEET_GMAIL)
     raw_password = _require(gmail, LBL_PASSWORD, SHEET_GMAIL)
+    raw_gh_token = gmail.get(LBL_GITHUB_TOKEN, "").strip()
 
     active_vault = vault_path if vault_path is not None else (path.parent / ".credentials.dat")
     use_keyring = vault_path is None and path.resolve() == CONFIG_PATH.resolve()
@@ -222,10 +227,21 @@ def load_config(
             if save_password(
                 sender, app_password, vault_path=active_vault, use_os_keyring=use_keyring
             ) and mask_excel:
-                _mask_password_in_excel(path)
+                _mask_label_in_excel(path, LBL_PASSWORD)
     else:
         app_password = load_password(
             sender, vault_path=active_vault, use_os_keyring=use_keyring
+        )
+
+    if raw_gh_token and raw_gh_token != SAVED_PLACEHOLDER:
+        github_token = raw_gh_token
+        if save_github_token(
+            github_token, vault_path=active_vault, use_os_keyring=use_keyring
+        ) and mask_excel:
+            _mask_label_in_excel(path, LBL_GITHUB_TOKEN)
+    else:
+        github_token = load_github_token(
+            vault_path=active_vault, use_os_keyring=use_keyring
         )
 
     return Config(
@@ -236,6 +252,7 @@ def load_config(
             attach_dir=_require(gmail, LBL_ATTACH_DIR, SHEET_GMAIL),
             cc=split_emails(gmail.get(LBL_CC, "")),
             logo_path=gmail.get(LBL_LOGO, ""),
+            github_token=github_token,
         ),
         suppliers=suppliers,
         templates=Templates(
@@ -305,6 +322,13 @@ _GMAIL_DEFAULT_ROWS: list[tuple[str, str, str, Optional[int]]] = [
         "",
         "Không bắt buộc. Đường dẫn file ảnh logo công ty (.png/.jpg) để nhúng vào chữ ký HTML, "
         "ví dụ: logo.png (đặt cạnh file exe).",
+        45,
+    ),
+    (
+        LBL_GITHUB_TOKEN,
+        "",
+        "Không bắt buộc. GitHub Personal Access Token (Read-only) để tải bản cập nhật OTA từ kho lưu trữ riêng tư (Private Repo). "
+        "Sau khi lưu, app sẽ tự động mã hóa và ẩn token.",
         45,
     ),
 ]

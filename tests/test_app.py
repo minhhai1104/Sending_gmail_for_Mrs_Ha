@@ -750,3 +750,63 @@ class V2HtmlAndExcelReportTests(unittest.TestCase):
             self.assertEqual(ws.cell(row=3, column=9).value, "Lỗi")
         finally:
             wb.close()
+
+
+    def test_private_repo_ota_token_encryption_and_headers(self):
+        import hashlib
+        import io
+        import json
+
+        from app import updater
+
+        # 1. Mã hóa và giải mã portable OTA token (.ota_token.dat) không lộ plaintext
+        token_file = self.tmp_path / ".ota_token.dat"
+        sample_token = "ghp_SampleSecretTokenForPrivateRepo12345"
+        self.assertTrue(security.save_embedded_ota_token(sample_token, token_file))
+        self.assertNotIn(sample_token, token_file.read_text(encoding="utf-8"))
+        self.assertEqual(security.load_embedded_ota_token(token_file), sample_token)
+
+        # 2. Kiểm tra gửi header Authorization: Bearer <token> và tải qua api_asset_url
+        content = b"private_release_zip_content"
+        good_hash = hashlib.sha256(content).hexdigest()
+        api_asset_endpoint = "https://api.github.com/repos/minhhai1104/Sending_gmail_for_Mrs_Ha/releases/assets/99999"
+
+        payload = {
+            "tag_name": "v2.1.0",
+            "published_at": "2026-11-21T10:50:00Z",
+            "body": f"Private OTA Release\nSHA256: {good_hash}",
+            "assets": [
+                {
+                    "name": "Gui_mail_nha_cung_cap_v2.1.0.zip",
+                    "url": api_asset_endpoint,
+                    "browser_download_url": "https://github.com/minhhai1104/Sending_gmail_for_Mrs_Ha/releases/download/v2.1.0/Gui_mail_nha_cung_cap_v2.1.0.zip",
+                }
+            ],
+        }
+
+        captured_headers: list[dict[str, str]] = []
+
+        def fake_urlopen(req, timeout=30.0):
+            hdrs = {k.lower(): v for k, v in req.header_items()}
+            captured_headers.append(hdrs)
+            if req.full_url == api_asset_endpoint:
+                resp = io.BytesIO(content)
+                resp.headers = {"Content-Length": str(len(content))}  # type: ignore[attr-defined]
+                return resp
+            resp_json = io.BytesIO(json.dumps(payload).encode("utf-8"))
+            resp_json.status = 200  # type: ignore[attr-defined]
+            return resp_json
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            info = updater.check_for_update("2.0.0", token=sample_token)
+            self.assertIsNotNone(info)
+            assert info is not None
+            self.assertEqual(info.api_asset_url, api_asset_endpoint)
+            self.assertEqual(captured_headers[0].get("authorization"), f"Bearer {sample_token}")
+
+            dl_path = updater.download_release_asset(
+                info, self.tmp_path, token=sample_token
+            )
+            self.assertEqual(dl_path.read_bytes(), content)
+            self.assertEqual(captured_headers[1].get("authorization"), f"Bearer {sample_token}")
+            self.assertEqual(captured_headers[1].get("accept"), "application/octet-stream")

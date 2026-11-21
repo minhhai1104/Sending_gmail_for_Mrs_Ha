@@ -1,11 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Đặc tả đóng gói PyInstaller cho ứng dụng Gui_mail_nha_cung_cap.exe."""
+"""Đặc tả đóng gói PyInstaller cho ứng dụng Gui_mail_nha_cung_cap.exe (kèm .ota_token.dat mã hóa)."""
+from pathlib import Path
+
+_ota_datas = [('.ota_token.dat', '.')] if Path('.ota_token.dat').is_file() else []
 
 a = Analysis(
     ['main.py'],
     pathex=['.', 'vendor'],
     binaries=[],
-    datas=[],
+    datas=_ota_datas,
     hiddenimports=['openpyxl', 'et_xmlfile', 'sqlite3'],
     hookspath=[],
     hooksconfig={},
