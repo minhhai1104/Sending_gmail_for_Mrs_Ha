@@ -1,7 +1,7 @@
-# Hướng Dẫn Sử Dụng Nhanh — Gmail Auto Mailer v3.1.0 (Haesung Vina)
+# Hướng Dẫn Sử Dụng Nhanh — Gmail Auto Mailer v3.1.1 (Haesung Vina)
 
 ## 1. Cài đặt chỉ với 1 cú click (Không cần cài Python, Không cần quyền Admin)
-1. Chạy file bộ cài **`Cai_dat_Gui_mail_Haesung_Vina_v3.1.0.exe`** (trong thư mục `Ban_phat_hanh`).
+1. Chạy file bộ cài **`Cai_dat_Gui_mail_Haesung_Vina_v3.1.1.exe`** (trong thư mục `Ban_phat_hanh`).
 2. Bấm **Install** — bộ cài tự động tạo biểu tượng **Gmail Auto Mailer** có logo thương hiệu ngoài màn hình chính (Desktop) & Start Menu và tự mở ứng dụng ngay lập tức.
 3. Toàn bộ cấu hình, mật khẩu (mã hóa bằng Windows DPAPI) và lịch sử gửi được lưu riêng tại `%LOCALAPPDATA%\GmailAutoMailer` — an toàn tuyệt đối khi cập nhật phiên bản mới (OTA).
 

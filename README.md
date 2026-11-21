@@ -1,6 +1,6 @@
 # Gmail Auto Mailer v3.1 — Haesung Vina
 
-![Version](https://img.shields.io/badge/version-v3.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v3.1.1-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)
 ![UI](https://img.shields.io/badge/UI-PyWebView%20%2B%20Edge%20WebView2-0F7B43.svg)
 
@@ -8,7 +8,7 @@
 
 ---
 
-## Tính Năng Nổi Bật (v3.1.0)
+## Tính Năng Nổi Bật (v3.1.1)
 
 1. **Giao diện thương mại Modern Enterprise (PyWebView + Edge WebView2)**:
    - Bố cục 1 cửa sổ thống nhất với 6 màn hình In-App: **Trợ lý thiết lập 60s**, **Gửi Mail (Split Live Preview với Bảng NCC 1 dòng siêu gọn tối ưu 50+ đối tác, sắp xếp cột tại chỗ, chỉ báo 1 chạm & điều hướng `↑/↓`)**, **Danh bạ Nhà cung cấp**, **Mẫu Email & Chữ ký**, **Lịch sử gửi**, **Cài đặt**.
@@ -25,7 +25,7 @@
    - **Windows DPAPI Vault thuần** (`%LOCALAPPDATA%\GmailAutoMailer\vault.dpapi`), giao diện Write-Only (không bao giờ nạp ngược mật khẩu), lọc `redact_secrets()` toàn hệ thống.
    - **Gửi thử về Gmail của tôi** (`[GỬI THỬ]`, xóa sạch CC, không ghi lịch sử), **SMTP SSL 465 → STARTTLS 587 fallback**, cố định `Message-ID`, **Smart Pacing** + **Exponential Backoff Retry**, **1-Click Gửi lại nhà bị lỗi**, và **Pause-Aware Telemetry**.
 5. **Bộ Cài 1-Click Chuyên Nghiệp & Cập Nhật OTA An Toàn**:
-   - Bộ cài Per-User `Cai_dat_Gui_mail_Haesung_Vina_v3.1.0.exe` (Inno Setup, không cần quyền Admin), icon thương hiệu Haesung Vina đa cỡ `.ico`, đầy đủ Windows Version Info, khởi động nhanh gấp 3 lần (`--onedir`).
+   - Bộ cài Per-User `Cai_dat_Gui_mail_Haesung_Vina_v3.1.1.exe` (Inno Setup, không cần quyền Admin), icon thương hiệu Haesung Vina đa cỡ `.ico`, đầy đủ Windows Version Info, khởi động nhanh gấp 3 lần (`--onedir`).
    - Cập nhật OTA 2 tiến trình (`updater.exe` thuần stdlib) bắt buộc xác thực **SHA-256** và **GitHub HTTPS domain allowlist**.
 
 ---
@@ -33,7 +33,7 @@
 ## Cài Đặt & Phát Triển
 
 ### Dành cho Người dùng cuối
-Tải và chạy file **`Cai_dat_Gui_mail_Haesung_Vina_v3.1.0.exe`** (xem thêm [HUONG_DAN.md](HUONG_DAN.md)).
+Tải và chạy file **`Cai_dat_Gui_mail_Haesung_Vina_v3.1.1.exe`** (xem thêm [HUONG_DAN.md](HUONG_DAN.md)).
 
 ### Dành cho Kỹ sư phát triển
 ```bash

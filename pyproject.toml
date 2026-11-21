@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gmail-auto-mailer"
-version = "3.1.0"
+version = "3.1.1"
 description = "Ứng dụng gửi email hàng loạt hàng tháng cho nhà cung cấp — Zero-Manual Enterprise (Haesung Vina)"
 readme = "README.md"
 requires-python = ">=3.10"

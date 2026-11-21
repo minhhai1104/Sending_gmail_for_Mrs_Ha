@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import email
+import email.policy
 import io
 import json
+import re
 import smtplib
 import sqlite3
 import sys
+import unicodedata
 import zipfile
 from contextlib import closing
+from email.generator import BytesGenerator
+from email.header import decode_header, make_header
+from email.utils import getaddresses
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -122,7 +129,13 @@ class TestSqliteAppStore:
         plan_fail = MailPlan(1, "=CMD|evil", True, ["a@x.com"], [], "=1+1", "body")
         plan_ok = MailPlan(2, "ACE", True, ["b@x.com"], [], "Sub", "body")
 
-        store.record(plan_fail, SendResult("=CMD|evil", False, "Timeout", SendErrorKind.TRANSIENT_NETWORK), 9, 2026, "Chốt")
+        store.record(
+            plan_fail,
+            SendResult("=CMD|evil", False, "Timeout", SendErrorKind.TRANSIENT_NETWORK),
+            9,
+            2026,
+            "Chốt",
+        )
         store.record(plan_ok, SendResult("ACE", False, "Timeout"), 9, 2026, "Chốt")
         store.record(plan_ok, SendResult("ACE", True, "OK"), 9, 2026, "Chốt")
 
@@ -231,6 +244,173 @@ class TestOsFileScannerAndSmtp:
         assert exc_info.value.kind == SendErrorKind.AUTH
         assert mock_ssl.quit.called or mock_ssl.close.called
 
+    def test_attachment_headers_avoid_rfc2231_continuations_for_domain_mail(self, tmp_path: Path) -> None:
+        """Tái hiện lỗi thực tế trên mail domain (DaouOffice @hso.co.kr): KHÔNG sinh filename*0*= RFC 2231."""
+        xlsx_name = "Bảng phí kiểm tra, phân loại hàng hóa 10.2026 DiaMond.xlsx"
+        pdf_name = "Bảng phí kiểm tra, phân loại hàng hóa 10.2026 DiaMond.pdf"
+        logo_name = "Logo Công Ty Haesung.png"
+
+        xlsx_file = tmp_path / xlsx_name
+        pdf_file = tmp_path / pdf_name
+        logo_file = tmp_path / logo_name
+        xlsx_file.write_bytes(b"PK\x03\x04excel-diamond-payload")
+        pdf_file.write_bytes(b"%PDF-1.4-diamond-payload")
+        logo_file.write_bytes(b"\x89PNG\r\n\x1a\nlogo-bytes")
+
+        sf_xlsx = ScannedFile(
+            xlsx_file, xlsx_name, ".xlsx", xlsx_file.stat().st_size, compute_file_sha256(xlsx_file)
+        )
+        sf_pdf = ScannedFile(
+            pdf_file, pdf_name, ".pdf", pdf_file.stat().st_size, compute_file_sha256(pdf_file)
+        )
+        settings = GmailSettings(
+            sender="ngoc.ha@gmail.com",
+            display_name="Ms. Ngọc Ha - Haesung Vina",
+            logo_path=str(logo_file),
+        )
+        plan = MailPlan(
+            1,
+            "DiaMond",
+            True,
+            ["ha.ntn@hso.co.kr", "hoa.ntt@hso.co.kr", "thuy.dt@hso.co.kr"],
+            ["manager@hso.co.kr"],
+            "Bảng phí kiểm tra, phân loại hàng hóa tháng 10 năm 2026 - DiaMond - Tạm tính",
+            "Kính gửi quý đối tác,\nVui lòng kiểm tra file đính kèm.\n---\nMs. Ngọc Ha",
+            attachments=[
+                AttachmentMatch(FileType.EXCEL, xlsx_name, MatchStatus.EXACT, file=sf_xlsx),
+                AttachmentMatch(FileType.PDF, pdf_name, MatchStatus.EXACT, file=sf_pdf),
+            ],
+            logo_path=logo_file,
+        )
+
+        msg = build_email_message(settings, plan, message_id=generate_message_id(settings.sender))
+
+        # Serialize đúng như smtplib.SMTP.send_message(msg) phát lên đường truyền SMTP
+        buf = io.BytesIO()
+        BytesGenerator(buf).flatten(msg, linesep="\r\n")
+        wire = buf.getvalue()
+        wire_text = wire.decode("ascii")
+
+        # 1. Tuyệt đối KHÔNG dùng RFC 2231 parameter continuations (filename*0*= / filename*= / name*=)
+        assert "filename*" not in wire_text
+        assert "name*" not in wire_text
+        assert "utf-8''" not in wire_text.lower()
+
+        # 2. Tuân thủ nghiêm ngặt RFC 5322 CRLF và giới hạn độ dài dòng SMTP <= 998
+        assert b"\r\r\n" not in wire
+        for line in wire.split(b"\r\n"):
+            assert len(line) <= 998
+            assert b"\r" not in line and b"\n" not in line
+
+        # 3. Mọi RFC 2047 encoded-word trong header đều <= 75 ký tự (RFC 2047 Section 2)
+        for token in re.findall(r"=\?[^?]+\?[BbQq]\?[^?]*\?=", wire_text):
+            assert len(token) <= 75, f"Encoded-word vượt quá 75 ký tự: {token}"
+
+        # 4. Đính kèm có đầy đủ MIME type chuẩn Office/PDF + cả `name=` và `filename=`
+        assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in wire_text
+        assert "application/pdf" in wire_text
+        assert 'name="=?UTF-8?B?' in wire_text
+        assert 'filename="=?UTF-8?B?' in wire_text
+
+        # 5. Đọc lại bằng parser hiện đại (default policy): tên file, nội dung và logo CID vẹn nguyên, 0 defects
+        parsed_modern = email.message_from_bytes(wire, policy=email.policy.default)
+        atts_modern = list(parsed_modern.iter_attachments())
+        assert len(atts_modern) == 2
+        assert [a.get_filename() for a in atts_modern] == [xlsx_name, pdf_name]
+        assert [a.get_param("name") for a in atts_modern] == [xlsx_name, pdf_name]
+        assert atts_modern[0].get_payload(decode=True) == b"PK\x03\x04excel-diamond-payload"
+        assert atts_modern[1].get_payload(decode=True) == b"%PDF-1.4-diamond-payload"
+        assert all(a.defects == [] for a in atts_modern)
+
+        # 6. Đọc lại bằng parser cũ (compat32 — mô phỏng DaouOffice/JavaMail/Outlook cũ)
+        parsed_legacy = email.message_from_bytes(wire, policy=email.policy.compat32)
+        legacy_atts: list[tuple[str, str]] = []
+        inline_cids: list[str] = []
+        for part in parsed_legacy.walk():
+            disp = part.get_content_disposition()
+            if disp == "attachment":
+                raw_fn = part.get_filename() or ""
+                raw_name = str(part.get_param("name") or "")
+                dec_fn = str(make_header(decode_header(raw_fn)))
+                dec_name = str(make_header(decode_header(raw_name)))
+                legacy_atts.append((dec_fn, dec_name))
+            elif disp == "inline" and part.get("Content-ID"):
+                inline_cids.append(str(part.get("Content-ID")))
+        assert legacy_atts == [(xlsx_name, xlsx_name), (pdf_name, pdf_name)]
+        assert inline_cids == ["<company_logo_haesung>"]
+
+        # 7. Địa chỉ From/To/Cc trích xuất chuẩn xác cho smtplib.SMTP.send_message
+        assert getaddresses([msg["From"]])[0][1] == "ngoc.ha@gmail.com"
+        to_cc = [addr for _, addr in getaddresses([msg["To"], msg["Cc"]])]
+        assert to_cc == ["ha.ntn@hso.co.kr", "hoa.ntt@hso.co.kr", "thuy.dt@hso.co.kr", "manager@hso.co.kr"]
+
+    def test_attachment_filename_edge_cases_ascii_korean_long_and_nfd(self, tmp_path: Path) -> None:
+        """Kiểm thử tên file ASCII thuần, tiếng Hàn, NFD từ macOS, tên siêu dài >900B và chống header injection."""
+        cases = [
+            ("ACE_10.2026.xlsx", "ACE_10.2026.xlsx", False),
+            (
+                "Fee report (final), 10.2026 - DiaMond.xlsx",
+                "Fee report (final), 10.2026 - DiaMond.xlsx",
+                False,
+            ),
+            ("해성비나_2026년_10월_수수료_DiaMond.xlsx", "해성비나_2026년_10월_수수료_DiaMond.xlsx", True),
+            (
+                unicodedata.normalize("NFD", "Bảng phí kiểm tra 10.2026.xlsx"),
+                unicodedata.normalize("NFC", "Bảng phí kiểm tra 10.2026.xlsx"),
+                True,
+            ),
+            (
+                ("Bảng phí kiểm tra phân loại hàng hóa tháng 10 năm 2026 - " * 9) + "DiaMond.xlsx",
+                ("Bảng phí kiểm tra phân loại hàng hóa tháng 10 năm 2026 - " * 9) + "DiaMond.xlsx",
+                True,
+            ),
+            ('Bad "quote"\r\nX-Injected: 1\x00.xlsx', 'Bad "quote"X-Injected: 1.xlsx', True),
+        ]
+        many_recipients = [f"receiver{i}@partner-domain.co.kr" for i in range(6)]
+        settings = GmailSettings(sender="me@gmail.com", display_name="")
+
+        for idx, (raw_name, expected_name, expect_rfc2047) in enumerate(cases):
+            disk_file = tmp_path / f"sample_{idx}.xlsx"
+            disk_file.write_bytes(f"excel-{idx}".encode("utf-8"))
+            sf = ScannedFile(
+                disk_file, raw_name, ".xlsx", disk_file.stat().st_size, compute_file_sha256(disk_file)
+            )
+            plan = MailPlan(
+                idx + 1,
+                "DiaMond",
+                True,
+                many_recipients if idx == 0 else ["partner@company.co.kr"],
+                [],
+                "Test Subject",
+                "Test Body",
+                attachments=[AttachmentMatch(FileType.EXCEL, raw_name, MatchStatus.EXACT, file=sf)],
+            )
+            msg = build_email_message(settings, plan, message_id=generate_message_id(settings.sender))
+            buf = io.BytesIO()
+            BytesGenerator(buf).flatten(msg, linesep="\r\n")
+            wire = buf.getvalue()
+            wire_text = wire.decode("ascii")
+
+            assert "filename*" not in wire_text
+            assert "name*" not in wire_text
+            assert "\r\nX-Injected:" not in wire_text
+            for line in wire.split(b"\r\n"):
+                assert len(line) <= 998
+
+            if expect_rfc2047:
+                assert 'filename="=?UTF-8?B?' in wire_text
+            else:
+                assert f'filename="{expected_name}"' in wire_text
+
+            parsed = email.message_from_bytes(wire, policy=email.policy.default)
+            atts = list(parsed.iter_attachments())
+            assert len(atts) == 1
+            assert atts[0].get_filename() == expected_name
+            assert atts[0].get_param("name") == expected_name
+            assert atts[0].defects == []
+            if idx == 0:
+                assert [a for _, a in getaddresses([msg["To"]])] == many_recipients
+
 
 class TestOtaHardening:
     def test_mandatory_sha256_and_domain_allowlist(self, tmp_path: Path) -> None:
@@ -245,7 +425,9 @@ class TestOtaHardening:
         assert is_newer_version("3.0.0", "2.0.0") is True
 
         # Khóa domain allowlist
-        validate_https_github_url("https://github.com/minhhai1104/Sending_gmail_for_Mrs_Ha/releases/download/v3.0.0/app.zip")
+        validate_https_github_url(
+            "https://github.com/minhhai1104/Sending_gmail_for_Mrs_Ha/releases/download/v3.0.0/app.zip"
+        )
         with pytest.raises(UpdateError):
             validate_https_github_url("http://github.com/evil.zip")
         with pytest.raises(UpdateError):
@@ -339,7 +521,9 @@ class TestOtaHardening:
         app_dir.mkdir()
         (app_dir / "updater.exe").write_bytes(b"fake-exe")
         with patch("subprocess.Popen") as popen_mock:
-            spawn_standalone_updater(downloaded, target_dir=app_dir, current_pid=1234, relaunch_exe=app_dir / "main.exe")
+            spawn_standalone_updater(
+                downloaded, target_dir=app_dir, current_pid=1234, relaunch_exe=app_dir / "main.exe"
+            )
             popen_mock.assert_called_once()
             spawned_args = popen_mock.call_args[0][0]
             assert "updater_exec.exe" in spawned_args[0]
@@ -392,6 +576,7 @@ class TestOtaHardening:
             attachments=[AttachmentMatch(FileType.EXCEL, "gone.xlsx", MatchStatus.EXACT, file=missing_sf)],
         )
         with pytest.raises(MailTransportError) as ei:
-            build_email_message(GmailSettings(sender="me@gmail.com"), plan, generate_message_id("me@gmail.com"))
+            build_email_message(
+                GmailSettings(sender="me@gmail.com"), plan, generate_message_id("me@gmail.com")
+            )
         assert ei.value.kind == SendErrorKind.ATTACHMENT_IO
-

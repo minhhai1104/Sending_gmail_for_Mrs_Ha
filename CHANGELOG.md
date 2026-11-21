@@ -4,6 +4,16 @@ Mọi thay đổi đáng chú ý của dự án **Ứng dụng Gửi Email Hàng
 
 ---
 
+## [3.1.1] - 2026-11-21 — "Domain Mail Attachment Compatibility"
+
+### 🐛 Sửa Lỗi Khẩn Cấp (Mail Domain Doanh Nghiệp)
+- **Khắc phục triệt để lỗi hỏng tên file đính kèm & mất đuôi `.xlsx` / `.pdf` khi gửi sang mail domain doanh nghiệp (DaouOffice `@hso.co.kr`, Hiworks, Naver Works, Outlook/Exchange cũ)**:
+  - Chuyển lõi dựng MIME tại `app/adapters/smtp_mailer.py` từ `EmailMessage.add_attachment` (vốn tự bẻ tên tiếng Việt dài sang chuẩn RFC 2231 `filename*0*=utf-8''...; filename*1*=...` khiến trình đọc mail domain ghép ngược mảnh và mất đuôi mở rộng) sang `MIMEMultipart` + `MIMEBase` với chuẩn **RFC 2047 UTF-8 Base64 (`=?UTF-8?B?...?=`)** đồng bộ trên cả `Content-Type; name="..."` và `Content-Disposition: attachment; filename="..."` (tương thích 100% cả Gmail lẫn mọi hệ thống mail domain).
+  - Bổ sung bảng MIME type tường minh cho `.xlsx`, `.xls`, `.xlsm`, `.pdf` và ảnh logo CID (tránh lệ thuộc Windows Registry), chuẩn hóa tên file tiếng Việt về **Unicode NFC** (chống lỗi dấu tách rời từ macOS), bổ sung header `Date:` chuẩn RFC 5322 và chặn ký tự điều khiển `\r\n\x00` chống Header Injection.
+  - Bổ sung 2 bộ test hồi quy MIME trong `tests/adapters/test_adapters.py` kiểm chứng byte SMTP thực tế (76/76 tests passed, coverage 86.49%).
+
+---
+
 ## [3.1.0] - 2026-11-21 — "High-Density 50+ Supplier Table"
 
 ### ✨ Cải Tiến Giao Diện Danh Sách Nhà Cung Cấp (Tối Ưu Quy Mô 50+ NCC)

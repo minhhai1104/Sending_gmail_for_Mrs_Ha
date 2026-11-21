@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+import email.policy
 import hmac
 import mimetypes
 import smtplib
 import ssl
-from email.headerregistry import Address
-from email.message import EmailMessage
-from email.utils import make_msgid
+import unicodedata
+from email import encoders
+from email.header import Header
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr, formatdate, make_msgid
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +28,25 @@ GMAIL_SSL_PORT = 465
 GMAIL_STARTTLS_PORT = 587
 TIMEOUT_SECONDS = 45
 LOGO_CID = "company_logo_haesung"
+
+# Dùng compat32 với max_line_length=0 để smtplib.send_message (BytesGenerator)
+# KHÔNG tự bẻ tham số tên file sang RFC 2231 (filename*0*= / filename*1*=),
+# tránh lỗi đảo ngược mảnh tên & mất đuôi .xlsx/.pdf trên mail domain (DaouOffice, Outlook cũ, Hiworks...).
+_NO_WRAP_COMPAT_POLICY = email.policy.compat32.clone(max_line_length=0)
+
+# Bản đồ MIME tường minh cho file văn phòng & ảnh logo (tránh lệ thuộc Windows Registry bị thiếu/sai).
+_EXPLICIT_MIME_TYPES: dict[str, str] = {
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
+    ".csv": "text/csv",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
 
 
 class MailTransportError(Exception):
@@ -74,46 +99,168 @@ def _resolve_explicit_logo(settings: GmailSettings, plan: MailPlan) -> Optional[
     return None
 
 
+def _guess_mime_type(filename: str) -> tuple[str, str]:
+    """Xác định `(maintype, subtype)` ưu tiên bảng chuẩn Office/PDF trước `mimetypes.guess_type`."""
+    ext = Path(filename).suffix.lower()
+    mime_type = (
+        _EXPLICIT_MIME_TYPES.get(ext) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    )
+    main_type, sep, sub_type = mime_type.partition("/")
+    if not sep or not main_type or not sub_type:
+        return "application", "octet-stream"
+    return main_type, sub_type
+
+
+def encode_mime_filename(filename: str) -> str:
+    """Mã hóa tên file đính kèm an toàn tương thích 100% Gmail, Outlook và Mail Domain (DaouOffice/Hiworks/Exchange).
+
+    - Chuẩn hóa NFC (tránh lỗi dấu tiếng Việt tách rời từ macOS) và loại bỏ ký tự điều khiển chống Header Injection.
+    - Tên thuần ASCII an toàn (không chứa `"`, `\\`, `=?`) giữ nguyên nguyên vẹn.
+    - Tên có dấu tiếng Việt / tiếng Hàn / Unicode được mã hóa RFC 2047 UTF-8 Base64 (`=?UTF-8?B?...?=`),
+      mỗi encoded-word <= 75 ký tự, cắt đúng ranh giới ký tự UTF-8, KHÔNG dùng RFC 2231 `filename*0*=`.
+    """
+    clean = unicodedata.normalize("NFC", filename.replace("\r", "").replace("\n", "").replace("\x00", ""))
+    if (
+        clean
+        and all(32 <= ord(ch) <= 126 for ch in clean)
+        and '"' not in clean
+        and "\\" not in clean
+        and "=?" not in clean
+        and len(clean) <= 900
+    ):
+        return clean
+
+    prefix = "=?UTF-8?B?"
+    suffix = "?="
+    # 75 - 12 = 63 ký tự base64 -> tối đa 60 ký tự base64 = 45 byte UTF-8 -> mỗi từ tối đa 72 <= 75 ký tự
+    max_raw_bytes = ((75 - len(prefix) - len(suffix)) // 4) * 3
+    words: list[str] = []
+    chunk = bytearray()
+    for ch in clean:
+        ch_bytes = ch.encode("utf-8")
+        if chunk and len(chunk) + len(ch_bytes) > max_raw_bytes:
+            b64 = base64.b64encode(bytes(chunk)).decode("ascii")
+            words.append(f"{prefix}{b64}{suffix}")
+            chunk = bytearray()
+        chunk.extend(ch_bytes)
+    if chunk:
+        b64 = base64.b64encode(bytes(chunk)).decode("ascii")
+        words.append(f"{prefix}{b64}{suffix}")
+
+    # Giữ các encoded-word cách nhau bằng 1 dấu cách trên 1 dòng (tránh lỗi gãy dấu ngoặc kép trên Outlook/Apple Mail),
+    # chỉ xuống dòng khi độ dài tiến sát giới hạn 998 ký tự/dòng của RFC 5322.
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        if not current:
+            current = word
+        elif len(current) + 1 + len(word) <= 900:
+            current = f"{current} {word}"
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return "\n ".join(lines)
+
+
+def _format_sender_header(display_name: str, sender: str) -> str:
+    """Định dạng header `From:` chuẩn RFC 5322 / RFC 2047."""
+    clean_name = unicodedata.normalize(
+        "NFC", (display_name or "").replace("\r", "").replace("\n", "").strip()
+    )
+    if not clean_name:
+        return sender
+    if all(32 <= ord(ch) <= 126 for ch in clean_name):
+        return formataddr((clean_name, sender))
+    return formataddr((Header(clean_name, "utf-8", maxlinelen=75).encode(), sender))
+
+
+def _format_address_list(addresses: list[str]) -> str:
+    """Nối danh sách địa chỉ To/Cc có gấp dòng sạch để không bao giờ vượt 998 ký tự/dòng."""
+    lines: list[str] = []
+    current = ""
+    for addr in addresses:
+        if not current:
+            current = addr
+        elif len(current) + 2 + len(addr) <= 76:
+            current = f"{current}, {addr}"
+        else:
+            lines.append(f"{current},")
+            current = addr
+    if current:
+        lines.append(current)
+    return "\n ".join(lines)
+
+
+def _build_binary_part(
+    payload: bytes,
+    filename: str,
+    disposition: str,
+    content_id: Optional[str] = None,
+) -> MIMEBase:
+    """Tạo MIME part nhị phân Base64 với cả `Content-Type; name=` và `Content-Disposition; filename=` chuẩn RFC 2047."""
+    main_type, sub_type = _guess_mime_type(filename)
+    part = MIMEBase(main_type, sub_type, policy=_NO_WRAP_COMPAT_POLICY)
+    del part["MIME-Version"]
+    part.set_payload(payload)
+    encoders.encode_base64(part)
+
+    encoded_name = encode_mime_filename(filename)
+    part.replace_header("Content-Type", f'{main_type}/{sub_type};\n name="{encoded_name}"')
+    part.add_header("Content-Disposition", f'{disposition};\n filename="{encoded_name}"')
+    if content_id:
+        part["Content-ID"] = f"<{content_id}>"
+    return part
+
+
 def build_email_message(
     settings: GmailSettings,
     plan: MailPlan,
     message_id: str,
     verify_toctou: bool = True,
-) -> EmailMessage:
+) -> MIMEMultipart:
     """Dựng MIME Multipart (Plaintext + HTML đã sanitize + Logo CID tùy chọn + Đính kèm đã xác thực TOCTOU)."""
-    msg = EmailMessage()
-    msg["From"] = Address(settings.display_name, addr_spec=settings.sender)
-    msg["To"] = [Address(addr_spec=mail) for mail in plan.recipients]
+    msg = MIMEMultipart("mixed", policy=_NO_WRAP_COMPAT_POLICY)
+    msg["From"] = _format_sender_header(settings.display_name, settings.sender)
+    msg["To"] = _format_address_list(plan.recipients)
     if plan.cc:
-        msg["Cc"] = [Address(addr_spec=mail) for mail in plan.cc]
-    msg["Subject"] = plan.subject
+        msg["Cc"] = _format_address_list(plan.cc)
+    msg["Subject"] = Header(plan.subject, "utf-8", maxlinelen=75).encode()
+    msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = message_id
 
     logo_file = _resolve_explicit_logo(settings, plan)
     logo_src = f"cid:{LOGO_CID}" if logo_file is not None else None
 
-    msg.set_content(plan.body)
+    alt = MIMEMultipart("alternative", policy=_NO_WRAP_COMPAT_POLICY)
+    del alt["MIME-Version"]
+
+    plain_part = MIMEText(plan.body, "plain", "utf-8", policy=_NO_WRAP_COMPAT_POLICY)
+    del plain_part["MIME-Version"]
+    alt.attach(plain_part)
+
     html_content = build_html_body(plan.body, logo_src=logo_src, for_preview=False)
-    msg.add_alternative(html_content, subtype="html")
+    html_part = MIMEText(html_content, "html", "utf-8", policy=_NO_WRAP_COMPAT_POLICY)
+    del html_part["MIME-Version"]
 
     if logo_file is not None:
         try:
             logo_bytes = logo_file.read_bytes()
-            mime_type = mimetypes.guess_type(logo_file.name)[0] or "image/png"
-            main_type, _, sub_type = mime_type.partition("/")
-            html_part = msg.get_body(preferencelist=("html",))
-            if html_part is not None:
-                html_part.add_related(  # type: ignore[attr-defined]
-                    logo_bytes,
-                    maintype=main_type,
-                    subtype=sub_type,
-                    cid=f"<{LOGO_CID}>",
-                )
         except OSError as exc:
             raise MailTransportError(
                 f"Không đọc được ảnh logo chữ ký '{logo_file.name}'.",
                 SendErrorKind.ATTACHMENT_IO,
             ) from exc
+        rel = MIMEMultipart("related", policy=_NO_WRAP_COMPAT_POLICY)
+        del rel["MIME-Version"]
+        rel.attach(html_part)
+        rel.attach(_build_binary_part(logo_bytes, logo_file.name, disposition="inline", content_id=LOGO_CID))
+        alt.attach(rel)
+    else:
+        alt.attach(html_part)
+
+    msg.attach(alt)
 
     for att in plan.attachments:
         if att.file is None:
@@ -152,14 +299,7 @@ def build_email_message(
                 SendErrorKind.ATTACHMENT_IO,
             ) from exc
 
-        mime_type = mimetypes.guess_type(att.file.name)[0] or "application/octet-stream"
-        main_type, _, sub_type = mime_type.partition("/")
-        msg.add_attachment(
-            payload,
-            maintype=main_type,
-            subtype=sub_type,
-            filename=att.file.name,
-        )
+        msg.attach(_build_binary_part(payload, att.file.name, disposition="attachment"))
 
     return msg
 

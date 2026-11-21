@@ -36,3 +36,8 @@ Ghi nhận các quyết định kiến trúc đã thống nhất qua quá trình
      - **Vàng (`NEEDS_REVIEW` — mặc định KHÔNG tick gửi)**: Mọi khớp gần đúng (fuzzy) bắt buộc người dùng đối chiếu và bấm duyệt từng dòng.
      - **Đỏ (`BLOCKED`)**: >=2 file cho 1 NCC, 1 file khớp >=2 NCC, chứa tên NCC khác, lệch kỳ tháng/năm, file rác `~$*`, trùng email chéo NCC.
    - Bất biến Song ánh 1–1 (path + `SHA-256`) và **TOCTOU Hash Pinning** trước khi gửi SMTP.
+
+8. **ADR-008 (Hotfix 21/11/2026): Tương Thích Tên File Đính Kèm Cho Mail Domain Doanh Nghiệp (RFC 2047 UTF-8 Base64 — Cấm RFC 2231 `filename*0*=`)**:
+   - **Bất biến bắt buộc**: Tuyệt đối KHÔNG dùng `EmailMessage.add_attachment(..., filename=...)` với `email.policy.default` (vốn tự bẻ tên tiếng Việt dài thành `filename*0*=utf-8''...; filename*1*=...; filename*2*=...` gây đảo ngược mảnh & mất đuôi `.xlsx`/`.pdf` trên mail domain doanh nghiệp như **DaouOffice `@hso.co.kr`**, Hiworks, Outlook/Exchange cũ).
+   - `build_email_message` dựng MIME bằng `MIMEMultipart` + `MIMEBase` (`compat32` với `max_line_length=0`), gán tường minh cả `Content-Type: <mime>; name="..."` và `Content-Disposition: attachment; filename="..."` với `encode_mime_filename()` chuẩn **RFC 2047 UTF-8 Base64** (`=?UTF-8?B?...?=`, mỗi từ `<= 75` ký tự, cắt đúng biên UTF-8, chuẩn hóa NFC, chặn header injection `\r\n\x00`), và dùng bảng MIME tường minh cho `.xlsx`/`.xls`/`.pdf`/ảnh logo.
+
