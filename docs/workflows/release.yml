@@ -1,0 +1,71 @@
+name: Build & Publish OTA Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build 2-Process Executables & Publish GitHub Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build & test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest ruff mypy openpyxl pyinstaller
+
+      - name: Quality Gate (Ruff, Mypy, Pytest)
+        run: |
+          python -m ruff check app tests main.py updater_runner.py
+          python -m mypy app main.py updater_runner.py
+          python -m pytest tests/test_app.py -v
+
+      - name: Build Main App & Standalone OTA Updater (.exe)
+        run: |
+          python -m PyInstaller Gui_mail_nha_cung_cap.spec --noconfirm --clean --distpath "Ban_phat_hanh" --workpath "build"
+          python -m PyInstaller updater.spec --noconfirm --clean --distpath "Ban_phat_hanh" --workpath "build"
+
+      - name: Package OTA Zip & Generate SHA-256 Metadata
+        id: pkg
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag.TrimStart("v")
+          $zipName = "Gui_mail_nha_cung_cap_$tag.zip"
+          Compress-Archive -Path "Ban_phat_hanh\Gui_mail_nha_cung_cap.exe", "Ban_phat_hanh\updater.exe" -DestinationPath $zipName -Force
+          $hash = (Get-FileHash -Path $zipName -Algorithm SHA256).Hash.ToLower()
+          $meta = @{
+            version = $ver
+            tag = $tag
+            asset_name = $zipName
+            sha256 = $hash
+          } | ConvertTo-Json
+          Set-Content -Path "version.json" -Value $meta -Encoding UTF8
+          "zip_name=$zipName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ### Bản phát hành tự động ${{ github.ref_name }} (OTA Auto-Update Ready)
+            - Bao gồm `Gui_mail_nha_cung_cap.exe` và tiến trình cập nhật độc lập `updater.exe`.
+            - Bảo toàn 100% dữ liệu cấu hình `Cau_hinh.xlsx`, `history.db` và thư mục `Dinh_kem/`.
+
+            SHA256: ${{ steps.pkg.outputs.sha256 }}
+          files: |
+            ${{ steps.pkg.outputs.zip_name }}
+            version.json

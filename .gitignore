@@ -1,18 +1,29 @@
-# === Dữ liệu cá nhân (chứa mật khẩu Gmail) ===
+# === Dữ liệu cá nhân & Bảo mật (không đồng bộ lên Git) ===
 Cau_hinh.xlsx
 Lich_su_gui.csv
+Lich_su_gui.xlsx
+history.db
+history.db-journal
+history.db-wal
+history.db-shm
+.credentials.dat
+*.vault.dat
 
 # === File tạm Excel ===
 ~$*.xlsx
 
-# === Python cache ===
+# === Python & Tooling cache ===
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # === Build artifacts ===
 build/
+dist/
 Ban_phat_hanh/
-*.spec
+build/*.spec
 
 # === Thư mục file đính kèm (dữ liệu riêng) ===
 Dinh_kem/
@@ -21,5 +32,5 @@ Dinh_kem/
 desktop.ini
 Thumbs.db
 
-# === Tài liệu không liên quan ===
+# === Tài liệu nội bộ ===
 document.docx

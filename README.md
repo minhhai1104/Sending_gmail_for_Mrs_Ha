@@ -1,6 +1,6 @@
 # Ứng dụng Gửi Email Hàng Loạt Cho Nhà Cung Cấp (Gmail Auto Mailer)
 
-[![Version](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/minhhai1104/Sending_gmail_for_Mrs_Ha)
+[![Version](https://img.shields.io/badge/version-v2.0.0-blue.svg)](https://github.com/minhhai1104/Sending_gmail_for_Mrs_Ha)
 [![Python](https://img.shields.io/badge/python-3.10%2B-brightgreen.svg)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
@@ -170,6 +170,18 @@ Khi có thay đổi về code và cần cập nhật lại file thực thi `.exe
 ---
 
 ## 🏷️ Lịch sử phiên bản (Changelog)
+
+### **v2.0.0 (21/11/2026)**
+- ✨ **Mẫu Email HTML Doanh Nghiệp & Nhúng Logo Inline CID**: Tự động định dạng nội dung mail và chữ ký sang HTML doanh nghiệp kèm khả năng nhúng ảnh Logo công ty (`logo.png`) trực tiếp vào chữ ký.
+- 📊 **Xuất Báo cáo Lịch sử ra File Excel (`Lich_su_gui.xlsx`)**: Bảng báo cáo định dạng màu trực quan, cố định tiêu đề, giữ nguyên định dạng chuỗi `"09"` cho cột Tháng.
+- 🔍 **Tìm kiếm nhanh & Telemetry tốc độ gửi**: Lọc nhanh nhà cung cấp theo thời gian thực trên màn hình Xem trước và hiển thị tốc độ gửi (`mail/phút`) + `ETA`.
+
+### **v1.2.0 (21/11/2026)**
+- 🚀 **Tự động cập nhật OTA 2 tiến trình qua GitHub Releases**: Kiểm tra phiên bản mới, xác thực mã băm `SHA-256`, chống `Zip Slip`, bảo toàn 100% dữ liệu người dùng và tự động hoán đổi binary qua `updater.exe`.
+
+### **v1.1.0 (21/11/2026)**
+- 🛡️ **Bảo mật Hybrid Mật khẩu ứng dụng Gmail**: Mã hóa mật khẩu vào kho bảo mật máy tính (`.credentials.dat` / Windows Credential Manager) và tự động ẩn mật khẩu thô trong `Cau_hinh.xlsx`.
+- 🗄️ **Lưu trữ Lịch sử SQLite (`history.db`) & Smart Pacing (1.5s)**: Chống lỗi mất lịch sử khi mở file trong Excel, giãn cách gửi chống Gmail chặn spam, bổ sung nút **Tạm dừng / Tiếp tục / Hủy gửi** và chọn/bỏ chọn lẻ từng nhà cung cấp.
 
 ### **v1.0.0 (30/10/2026)**
 - 🎉 **Phát hành phiên bản chính thức đầu tiên**.
