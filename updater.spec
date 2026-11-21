@@ -1,9 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Đặc tả đóng gói PyInstaller cho tiến trình cập nhật OTA độc lập updater.exe."""
+"""Đặc tả đóng gói PyInstaller cho tiến trình cập nhật OTA độc lập updater.exe (thuần stdlib)."""
+from pathlib import Path
+
+_icon_file = 'assets/app_icon.ico' if Path('assets/app_icon.ico').is_file() else None
+_version_file = 'build/version_info.txt' if Path('build/version_info.txt').is_file() else None
 
 a = Analysis(
     ['updater_runner.py'],
-    pathex=['.', 'vendor'],
+    pathex=['.'],
     binaries=[],
     datas=[],
     hiddenimports=[],
@@ -12,8 +16,22 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         'tkinter',
+        '_tkinter',
         'openpyxl',
         'sqlite3',
+        'webview',
+        'pythonnet',
+        'clr_loader',
+        'nh3',
+        'ssl',
+        '_ssl',
+        'hashlib',
+        '_hashlib',
+        'decimal',
+        'unicodedata',
+        'pyexpat',
+        'lzma',
+        'bz2',
         'matplotlib',
         'numpy',
         'pandas',
@@ -38,7 +56,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -47,4 +65,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=_icon_file,
+    version=_version_file,
 )

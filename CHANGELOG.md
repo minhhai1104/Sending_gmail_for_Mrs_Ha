@@ -4,6 +4,54 @@ Mọi thay đổi đáng chú ý của dự án **Ứng dụng Gửi Email Hàng
 
 ---
 
+## [3.1.0] - 2026-11-21 — "High-Density 50+ Supplier Table"
+
+### ✨ Cải Tiến Giao Diện Danh Sách Nhà Cung Cấp (Tối Ưu Quy Mô 50+ NCC)
+- **Tái thiết kế khu vực danh sách NCC sang Bảng Dữ Liệu 1 Dòng Siêu Gọn (`38px/dòng`)**:
+  - Tăng mật độ hiển thị từ **3–4 NCC** lên **11–12 NCC cùng lúc** trong khung nhìn chuẩn (`1240×790`), giúp quét và quản lý 50+ nhà cung cấp nhanh gấp 3 lần.
+  - Căn cột thẳng hàng tăm tắp với tiêu đề cột cố định (`position: sticky`): `[☐] | Nhà cung cấp ↕ | Email | Excel | (PDF khi Chốt) | Trạng thái ↕`. Cột `PDF` tự động ẩn ở chế độ `Tạm tính` và tự hiện ở chế độ `Chốt`.
+- **Loại bỏ nhiễu nút bấm lặp lại — Thao tác 1 chạm trực tiếp trên ô chỉ báo**:
+  - Thay hàng nút `+ Chọn EXCEL / + Thêm email` lặp lại trên mọi dòng bằng bộ chỉ báo SVG đồng nhất (`✓` hợp lệ, `✕` thiếu, `?` cần duyệt, `!` xung đột/cảnh báo) đạt kích thước bấm tối thiểu WCAG 2.5.8 (`28×26px`).
+  - Bấm `✕` ở cột `Email` mở thẳng Drawer chỉnh sửa và focus ngay ô email; bấm `✕` ở cột `Excel`/`PDF` mở File Picker ngay; bấm `?`/`!` chọn dòng và làm nổi bật thẻ tệp cần duyệt bên khung Xem Trước để đảm bảo không duyệt nhầm.
+  - Hiển thị trạng thái cụ thể theo từng nguyên nhân (`Thiếu Excel`, `Thiếu PDF`, `Thiếu email`, `Thiếu 2 mục`, `Thiếu 3 mục`, `Cần duyệt`, `Xung đột`, `Trùng file`, `Sai kỳ`, `Sẵn sàng`, `Đã gửi`, `Tạm tắt`) thay cho nhãn chung chung.
+- **Công cụ thao tác nhanh cho danh sách lớn**:
+  - Thêm **Checkbox chọn tất cả 3 trạng thái** (`checked` / `indeterminate` / `unchecked`) ngay trên tiêu đề bảng.
+  - Hỗ trợ **sắp xếp cột tại chỗ** theo `Nhà cung cấp` (chuẩn tiếng Việt `Intl.Collator('vi')`) và theo `Trạng thái` (gom các mục `Cần duyệt` và `Thiếu / Lỗi` lên đầu chỉ với 1 click) không làm mất vị trí focus hay rebuild DOM.
+  - Hỗ trợ **điều hướng bàn phím tốc độ cao (`↑`, `↓`, `Home`, `End`, `Space`)** để lướt xem trước Email HTML của 50+ nhà cung cấp liên tục.
+
+### 🎨 Tinh Chỉnh Chất Lượng Hiển Thị & Khả Năng Tiếp Cận (WCAG 2.1 AA)
+- Đồng bộ `color-scheme: light / dark` giúp checkbox, thanh cuộn và control hệ thống trên Dark Mode hiển thị tự nhiên, sắc nét.
+- Nâng độ tương phản chữ phụ (`--text-muted` `#526071`) đạt chuẩn WCAG 2.1 AA (`>= 4.5:1`), chuẩn hóa phân cấp heading (`h1 -> h2`), sửa cắt chữ dải nguồn file trên cửa sổ thu hẹp `980×650`, và tinh gọn kiểu Toast thông báo.
+
+---
+
+## [3.0.0] - 2026-11-21 — "Zero-Manual Enterprise"
+
+### ✨ Tái Thiết Kế Toàn Diện UI/UX & Tính Năng (Breaking Architecture Upgrade)
+- **Giao diện thương mại Modern Enterprise (PyWebView + Edge WebView2)**:
+  - Thay thế hoàn toàn giao diện Tkinter thô sơ bằng Web UI tĩnh 100% offline (Strict CSP, bộ icon SVG nét mảnh, Dark/Light/System Mode chuẩn 100% đồng bộ cả Win32 Dark Titlebar).
+  - Kiến trúc 1 cửa sổ duy nhất gồm **6 màn hình In-App**: Trợ lý thiết lập lần đầu 60 giây (3 bước), Không gian Gửi Mail 1 chạm (Split Pane + Live HTML Email & Logo Preview 1:1 trong `<iframe sandbox="">`), Quản lý Danh bạ Nhà cung cấp, Trình soạn Mẫu Email có Chip chèn biến 1-click, Tra cứu Lịch sử gửi In-App, và Cài đặt tập trung.
+- **Cấu hình 100% trong App — Loại bỏ hoàn toàn `Cau_hinh.xlsx`**:
+  - Lưu trữ cấu hình & lịch sử tập trung vào SQLite WAL SSOT (`%LOCALAPPDATA%\GmailAutoMailer\app_data.db`) có `schema_migrations`; tự động kế thừa lịch sử từ `history.db` bản v2.0.
+  - Hỗ trợ xuất báo cáo lịch sử Excel (`Lich_su_gui.xlsx`) chạy trên luồng nền (Non-Blocking).
+- **Tự Động Hóa Thông Minh & Rào Chắn Chống Gửi Nhầm (`Zero Wrong-Vendor Delivery`)**:
+  - Kéo-thả thư mục hoặc cụm file từ Windows Explorer; tự động gợi ý kỳ gửi & tự nhận diện chế độ `Tạm tính` vs `Chốt`.
+  - Động cơ Khớp File 3 Tầng (`EXACT`/`AUTO_MATCHED` Xanh, `NEEDS_REVIEW` Vàng mặc định không tick, `AMBIGUOUS`/`CONFLICT`/`WRONG_PERIOD`/`MISSING` Đỏ khóa cứng), bất biến Song ánh 1–1 (path + SHA-256), lọc file tạm Office `~$*`, chống đụng độ tên ngắn (`ACE` vs `AHC`, `A` vs `AB`, `T&T` vs `T&T Logistics`), cảnh báo trùng email chéo NCC, **TOCTOU Hash Pinning** và **Filter-Safe Selection**.
+  - **Auto-Discovery** gợi ý thêm NCC mới 1-click; **Gửi thử cho tôi** (`[GỬI THỬ]`, xóa CC, không ghi lịch sử); **1-Click Gửi lại nhà bị lỗi**.
+
+### 🔒 Bảo Mật & Độ Tin Cậy (Vá Triệt Để 12 Lỗ Hổng v2.0.0)
+- Thay `keyring` (từng bị lỗi thiếu trong `.exe`) và `_machine_secret()`/`_PORTABLE_OTA_SECRET` bằng **Windows DPAPI thuần (`CryptProtectData`)** tại `%LOCALAPPDATA%\GmailAutoMailer\vault.dpapi` + giao diện Write-Only + `redact_secrets()`.
+- Tự động fallback **SMTP SSL (465) → STARTTLS (587)**, cố định `Message-ID`, kiểm tra `NOOP` trước `DATA`, xử lý rõ `PartialRefusal`.
+- Đưa toàn bộ ghi lịch sử SQLite về **Worker Thread** + Graceful Shutdown khi đóng cửa sổ; sửa lỗi Telemetry ETA sau khi Pause; sanitize HTML phía Python bằng **`nh3`**.
+- Cứng hóa OTA: bắt buộc mã băm **SHA-256** (rỗng = từ chối), khóa **GitHub HTTPS domain allowlist**, tách `updater_runner.py` thuần stdlib giảm ~50% dung lượng `updater.exe`.
+
+### 📦 Thương Hiệu, Đóng Gói & Bộ Cài 1-Click
+- Thiết kế và nhúng icon thương hiệu Haesung Vina đa kích cỡ (`assets/app_icon.ico`) + đầy đủ **Windows Version Info** (`Haesung Vina Co., Ltd.`) + `AppUserModelID`, tắt UPX.
+- Đóng gói `--onedir` (khởi động nhanh gấp 3 lần) + **Bộ cài 1-Click Per-User (`Cai_dat_Gui_mail_Haesung_Vina_v3.0.0.exe` — Inno Setup)** không cần quyền Admin, tự tạo Desktop/Start Menu Shortcut.
+- Thiết lập GitHub Actions CI (`.github/workflows/ci.yml`) kiểm thử tự động `ruff` (`S`/`B`), `mypy`, `pytest` và build Windows.
+
+---
+
 ## [2.0.0] - 2026-11-21
 
 ### ✨ Mẫu Email HTML Doanh Nghiệp, Nhúng Logo Inline CID & Báo Cáo Excel (`.xlsx`)

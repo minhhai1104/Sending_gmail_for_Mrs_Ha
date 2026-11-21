@@ -1,181 +1,156 @@
-# Architecture Contract — Gmail Auto Mailer (`v1.1.0`)
+# Architecture Contract v3.0 — Gmail Auto Mailer ("Zero-Manual Enterprise")
 
-> **Trạng thái**: Khóa hợp đồng (Locked Contract for Sprint v1.1.0)  
-> **Quản trị bởi**: `pm-agent` • `be-agent` • `fe-agent` • `qa-agent`
-
----
-
-## 1. Hợp Đồng Mô-đun Bảo Mật Thông Tin Đăng Nhập (`app/security.py`)
-
-### Mục tiêu
-Bảo vệ Mật khẩu ứng dụng Gmail (16 ký tự) theo cơ chế **Hybrid Zero-Plaintext**:
-1. Cho phép người dùng nhập mật khẩu từ file Excel `Cau_hinh.xlsx` (ô `B6` sheet `Gmail`) hoặc từ giao diện GUI.
-2. Khi phát hiện mật khẩu thực trong `Cau_hinh.xlsx` (khác giá trị placeholder `******** (Đã lưu an toàn trên máy)`), hệ thống tự động:
-   - Lưu mật khẩu vào **Windows Credential Manager (`keyring`)** (hoặc fallback sang **Windows DPAPI / Local Encrypted Vault** nếu môi trường chưa cài `keyring`).
-   - Thay thế ô mật khẩu trong `Cau_hinh.xlsx` bằng chuỗi đánh dấu `SAVED_PLACEHOLDER = "******** (Đã lưu an toàn trên máy)"` (nếu file không bị khóa ghi) để khi người dùng chia sẻ file Excel sẽ không bị lộ mật khẩu.
-3. Khi đọc cấu hình, nếu ô mật khẩu trong Excel là `SAVED_PLACEHOLDER` hoặc trống, hệ thống tự động nạp mật khẩu đã lưu từ kho bảo mật theo địa chỉ `sender`.
-
-### Giao diện hàm (Public API)
-- `SAVED_PLACEHOLDER: str = "******** (Đã lưu an toàn trên máy)"`
-- `normalize_app_password(raw: str) -> str`: Xóa mọi khoảng trắng trong chuỗi mật khẩu.
-- `is_valid_app_password(password: str) -> bool`: Kiểm tra mật khẩu ứng dụng hợp lệ (đúng 16 ký tự chữ/số không dấu).
-- `save_password(sender: str, password: str, vault_path: Optional[Path] = None) -> bool`: Lưu mật khẩu an toàn cho `sender`.
-- `load_password(sender: str, vault_path: Optional[Path] = None) -> str`: Đọc mật khẩu đã lưu của `sender` (trả về `""` nếu chưa có).
-- `resolve_and_protect_password(sender: str, raw_cell_value: str, excel_path: Optional[Path] = None, vault_path: Optional[Path] = None, mask_excel: bool = True) -> str`: Giải quyết mật khẩu từ ô Excel + kho bảo mật, tự động cất vào kho và che mật khẩu trong file Excel nếu có thể.
+> **Trạng thái**: Khóa hợp đồng triển khai `v3.0.0` (Locked Contract — Approved by Project Owner 21/11/2026)  
+> **Quản trị bởi**: `pm-agent` • `designer-agent` • `be-agent` • `fe-agent` • `tester-agent` • `qa-agent` • `devops-agent`
 
 ---
 
-## 2. Hợp Đồng Mô-đun Cấu Hình & Auto-Migration (`app/config.py`)
+## 1. Kiến Trúc Tổng Thể (Clean Architecture + Passive Web View)
 
-### Invariants & Cải tiến Lượt 2
-1. **Đóng Workbook an toàn**: Luôn đóng `wb.close()` trong khối `try...finally`.
-2. **Bắt lỗi file Excel hỏng**: Bắt `zipfile.BadZipFile`, `InvalidFileException`, `KeyError`, `ValueError` và chuyển thành `ConfigError` tiếng Việt rõ ràng.
-3. **Auto-Migration không mất dữ liệu (`migrate_config_if_needed`)**: Tự động kiểm tra và bổ sung các dòng cấu hình mới nếu file `Cau_hinh.xlsx` từ phiên bản cũ thiếu nhãn mới, giữ nguyên 100% dữ liệu nhà cung cấp của người dùng.
-4. **Kiểm tra `Settings.problems()`**:
-   - Kiểm tra `sender` đúng định dạng email.
-   - Kiểm tra `app_password` không trống và đúng chuẩn 16 ký tự của Gmail App Password (cảnh báo rõ nếu người dùng nhập sai độ dài hoặc điền mật khẩu thường).
-   - Kiểm tra danh sách `cc` hợp lệ.
+Toàn bộ nghiệp vụ và trạng thái màn hình chạy bằng **Python thuần** tách biệt hoàn toàn với lớp giao diện **PyWebView (Microsoft Edge WebView2)** để `pytest` kiểm thử được >= 90% mã nguồn không cần mở cửa sổ GUI:
 
----
-
-## 3. Hợp Đồng Mô-đun Lập Kế Hoạch (`app/planner.py`)
-
-### Invariants & Cải tiến Lượt 2
-1. **Kiểm tra Tên Nhà cung cấp (`_supplier_errors`)**:
-   - Phát hiện trùng lặp tên nhà cung cấp (không phân biệt hoa/thường sau khi `strip()`) trong danh sách và báo lỗi rõ: `"Tên nhà cung cấp bị trùng lặp trong danh sách: {name}"`.
-   - Chặn các ký tự đường dẫn không hợp lệ trong tên nhà cung cấp (`/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) để chống lỗi biến tên NCC thành thư mục con (Path Traversal).
-2. **Kiểm tra File Đính Kèm (`Attachment` & `build_plans`)**:
-   - Kiểm tra tồn tại file (`path.is_file()`).
-   - Kiểm tra file rỗng `0 byte` (`size_bytes == 0` -> báo lỗi `"File đính kèm bị rỗng (0 KB): {path.name}"`).
-   - Kiểm tra tổng dung lượng đính kèm của một mail không vượt quá `MAX_TOTAL_ATTACHMENT_BYTES = 18 * 1024 * 1024` (~18 MB raw $\approx$ 24 MB MIME sau Base64, an toàn dưới ngưỡng 25 MB của Gmail).
-
----
-
-## 4. Hợp Đồng Mô-đun Lịch Sử SQLite & Xuất CSV (`app/history.py`)
-
-### Invariants & Cải tiến Lượt 2
-1. **Single Source of Truth bằng SQLite (`history.db`)**:
-   - Bảng `send_history`:
-     ```sql
-     CREATE TABLE IF NOT EXISTS send_history (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         sent_at TEXT NOT NULL,
-         month INTEGER NOT NULL,
-         year INTEGER NOT NULL,
-         kind TEXT NOT NULL,
-         supplier TEXT NOT NULL,
-         recipients TEXT NOT NULL,
-         subject TEXT NOT NULL,
-         attachments TEXT NOT NULL,
-         status TEXT NOT NULL,
-         detail TEXT NOT NULL
-     );
-     CREATE INDEX IF NOT EXISTS idx_history_period ON send_history(year, month, kind, status);
-     ```
-   - Không bao giờ bị lỗi khóa file khi người dùng đang mở `Lich_su_gui.csv` bằng Microsoft Excel.
-2. **Tương thích ngược & Tự động đồng bộ với `Lich_su_gui.csv`**:
-   - Nếu có dữ liệu cũ trong `Lich_su_gui.csv`, tự động nạp (import) vào SQLite và chuẩn hóa cột `Tháng` bằng `int(row["Tháng"])` (xử lý triệt để lỗi Excel cắt số `0` biến `"09"` thành `"9"`!).
-   - Khi `record()` ghi vào SQLite thành công, hàm luôn trả về `True` (đảm bảo lịch sử đã lưu an toàn 100%), đồng thời cố gắng xuất đồng bộ ra `Lich_su_gui.csv` (nếu CSV đang mở trong Excel thì không làm mất dữ liệu vì đã có trong SQLite, và lần bấm `"Xem lịch sử gửi"` sẽ tự xuất lại từ SQLite).
-   - Chống **CSV Formula Injection (`CWE-1236`)**: Làm sạch các giá trị văn bản bắt đầu bằng `=`, `+`, `-`, `@` khi ghi ra CSV để Excel không hiểu nhầm là công thức lỗi `#NAME?`.
+```text
+app/
+├── __init__.py                 # __version__ = "3.0.0"
+├── domain/                     # Pure Python (0 I/O, 0 GUI, 0 framework)
+│   ├── models.py               # AppConfig, GmailSettings, Supplier, MailTemplates, AttachmentMatch, MailPlan, BatchSummary, Enums
+│   ├── templating.py           # Render {thang}/{nam}/{nha_cung_cap}/{loai}, Variable Chips, HTML sanitizer (nh3)
+│   ├── matching.py             # Động cơ Khớp File 3 Tầng (Zero Wrong-Vendor Delivery — 100% branch coverage)
+│   └── validation.py           # Kiểm tra email, trùng tên (NFC+strip+lower), trùng email chéo NCC, mật khẩu ứng dụng 16 ký tự
+├── ports/                      # Typing Protocols cho Dependency Injection & Testability
+│   └── protocols.py            # ConfigRepository, SecretStore, HistoryRepository, MailTransport, FileScanner, Clock
+├── adapters/                   # Triển khai thực tế hạ tầng Windows & Mạng
+│   ├── dpapi_vault.py          # Windows DPAPI thuần (ctypes CryptProtectData) tại %LOCALAPPDATA%\GmailAutoMailer\vault.dpapi
+│   ├── sqlite_store.py         # SQLite WAL + schema_migrations (SSOT cho AppConfig & SendHistory + Export lịch sử .xlsx)
+│   ├── smtp_mailer.py          # SMTP SSL (465) -> STARTTLS (587) fallback, Multipart HTML+Logo CID, Message-ID cố định, TOCTOU SHA-256
+│   ├── fs_scanner.py           # Quét thư mục/file an toàn, tính SHA-256, lọc file rác hệ thống
+│   └── ota_updater.py          # OTA 2 tiến trình cứng hóa (Mandatory SHA-256, GitHub HTTPS allowlist, Zip Slip, Rollback .bak)
+├── application/                # Headless ViewModels / Services (100% testable không cần GUI)
+│   ├── app_service.py          # Điều phối Onboarding, Settings CRUD, Suppliers CRUD, Templates + Live HTML Preview, History Query
+│   ├── dispatch_service.py     # Lập kế hoạch gửi, Smart Auto-Match, Manual Override, Auto-Discovery, Test-to-Self, Filter-Safe Selection
+│   └── batch_runner.py         # Worker Thread State Machine (IDLE/RUNNING/PAUSED/CANCELLED/DONE), Pause-aware Telemetry, Graceful Shutdown
+├── ui/                         # Thin Shell PyWebView + Edge WebView2
+│   ├── bridge.py               # Strict Whitelist JS-API Facade (Write-Only Secrets, không nhận đường dẫn file tự do)
+│   ├── window.py               # Khởi tạo PyWebView, %LOCALAPPDATA% storage_path, Dark Titlebar, Drag & Drop, Event Bus 100ms
+│   └── web/                    # Tài nguyên tĩnh 100% offline (Strict CSP, Zero CDN)
+│       ├── index.html
+│       ├── styles.css
+│       └── app.js
+└── main.py / updater_runner.py # Entry points (updater_runner.py thuần stdlib giảm 50% dung lượng)
+```
 
 ---
 
-## 5. Hợp Đồng Mô-đun Lõi Gửi Mail SMTP (`app/mailer.py`)
+## 2. Hợp Đồng Bảo Mật Thông Tin Đăng Nhập (`app/adapters/dpapi_vault.py` — Zero Plaintext Secrets)
 
-### Invariants & Cải tiến Lượt 2
-1. **Tách lỗi Đọc File Đính Kèm khỏi lỗi Kết nối Mạng**:
-   - Đọc nội dung file đính kèm trong `build_message()` nếu gặp `FileNotFoundError` hoặc `PermissionError` sẽ quăng `MailError("Không đọc được file đính kèm '...' (file đang mở hoặc đã bị xóa).")` thay vì báo nhầm là mất mạng Internet.
-2. **Đóng Socket SSL an toàn khi Login thất bại**:
-   - Trong `GmailSession._connect()`, nếu `server.login()` quăng lỗi, bắt buộc đóng `server.close()` trước khi raise `MailError`.
-3. **Kiểm tra Partial Delivery (`refused_recipients`)**:
-   - Kiểm tra từ điển trả về của `refused = self._server.send_message(msg)`.
-   - Nếu `refused` không rỗng (có ít nhất 1 người nhận hoặc CC bị từ chối), đánh dấu `SendResult(ok=False, message="Gmail từ chối một số địa chỉ nhận: ...")` để tuyệt đối không báo thành công giả!
-4. **Sửa lỗi Văng Vòng Lặp Khi Reconnect Thất Bại & Exponential Backoff Retry**:
-   - Trong `send_plans()`, bắt cả `(MailError, smtplib.SMTPException, OSError)` cho từng `plan` để lỗi ở một nhà cung cấp (kể cả khi mất mạng reconnect thất bại) không bao giờ làm văng vòng lặp các nhà cung cấp tiếp theo.
-   - Hỗ trợ thử lại tối đa `max_retries` với Exponential Backoff khi gặp lỗi kết nối mạng tạm thời.
-5. **Smart Pacing & Điều khiển Luồng (Pause / Resume / Cancel)**:
-   - Giãn cách thông minh `pacing_delay: float` (mặc định `1.5` giây trong vận hành thật, `0.0` giây trong unit test) giữa các mail.
-   - Hỗ trợ `pause_event: Optional[threading.Event]` và `cancel_event: Optional[threading.Event]` để tạm dừng hoặc hủy đợt gửi ngay lập tức.
+1. **Tách rời hoàn toàn khỏi thư mục cài đặt App**:
+   - Thư mục dữ liệu người dùng chuẩn Windows: `%LOCALAPPDATA%\GmailAutoMailer\` (tạo tự động).
+   - File kho mật khẩu: `%LOCALAPPDATA%\GmailAutoMailer\vault.dpapi`.
+   - File CSDL cấu hình & lịch sử: `%LOCALAPPDATA%\GmailAutoMailer\app_data.db` (tự động đọc kế thừa lịch sử cũ nếu thấy `history.db` cạnh thư mục cài đặt ở lần đầu nâng cấp từ v2.0).
+2. **Mã hóa Windows DPAPI thuần (`CryptProtectData` / `CryptUnprotectData`)**:
+   - Gắn trực tiếp với Master Key của tài khoản Windows hiện tại (`CRYPTPROTECT_UI_FORBIDDEN`), không cần cài `keyring`, không lưu key tĩnh trong source code.
+   - Khi copy thư mục cài App sang máy khác / USB / Google Drive: **tuyệt đối không mang theo mật khẩu**.
+   - Loại bỏ hoàn toàn `_PORTABLE_OTA_SECRET` và `_machine_secret()`.
+3. **Write-Only Secret Contract**:
+   - `bridge.py` **TUYỆT ĐỐI KHÔNG** có API nào trả về chuỗi mật khẩu ứng dụng hay GitHub Token sang phía JavaScript.
+   - UI chỉ nhận cờ `has_app_password: bool` và `has_github_token: bool`.
+   - Mọi thông báo lỗi, log sự kiện đều đi qua `redact_secrets(text, active_secrets)` trước khi gửi lên UI hoặc ghi vào `send_history`.
 
 ---
 
-## 6. Hợp Đồng Giao Diện Tkinter & Xem Trước (`app/main_window.py`, `app/preview_dialog.py`)
+## 3. Hợp Đồng Cơ Sở Dữ Liệu SQLite SSOT (`app/adapters/sqlite_store.py`)
 
-### Invariants & Cải tiến Lượt 2
-1. **High-DPI Awareness**: Kích hoạt `SetProcessDpiAwareness` trên Windows để giao diện sắc nét trên màn hình Full HD / 2K / 4K.
-2. **Design System (`DESIGN.md`)**: Bảng màu Modern Enterprise Precision, hỗ trợ chuyển đổi giao diện Sáng / Tối (Light / Dark Mode).
-3. **Telemetry & Bộ Điều Khiển Luồng Trực Tiếp**:
-   - Hiển thị nhãn phần trăm tiến độ (`65% - 13/20 mail`), tốc độ gửi và ước tính thời gian còn lại (ETA).
-   - Nút **Tạm dừng (Pause) / Tiếp tục (Resume)** và **Hủy gửi (Cancel)** hoạt động tức thì khi đang gửi.
-4. **Bảo vệ Đóng Cửa Sổ (`WM_DELETE_WINDOW`)**:
-   - Khi đang gửi mail (`self._busy == True`), nếu người dùng bấm nút `X` đóng cửa sổ, hiển thị hộp thoại xác nhận; nếu đồng ý thoát thì kích hoạt `cancel_event` để đóng kết nối SMTP an toàn.
-5. **Tick Chọn/Bỏ Chọn Lẻ Từng Nhà Cung Cấp Trên `PreviewDialog`**:
-   - Người dùng có thể nhấp đúp hoặc bấm nút Chọn/Bỏ chọn trực tiếp từng nhà cung cấp trên bảng Xem trước mà không cần quay ra sửa file Excel.
-
-
----
-
-## 7. Hợp Đồng Mô-đun Cập Nhật Tự Động OTA 2 Tiến Trình (`app/updater.py` & `updater_runner.py` — `v1.2.0`)
-
-### Mục tiêu
-Cập nhật ứng dụng Over-The-Air (OTA) từ **GitHub Releases** trên Windows mà không bao giờ gặp lỗi khóa file thực thi (`WinError 5 / WinError 32`), đảm bảo **Zero Broken Installations** và **100% Bảo toàn dữ liệu người dùng**.
-
-### Hằng số & Danh sách Bất khả xâm phạm
-- `GITHUB_REPO = "minhhai1104/Sending_gmail_for_Mrs_Ha"`
-- `PROTECTED_USER_ITEMS: frozenset[str] = frozenset({"Cau_hinh.xlsx", "history.db", "history.db-journal", "history.db-wal", "history.db-shm", "Lich_su_gui.csv", ".credentials.dat", "Dinh_kem"})`
-
-### Giao diện hàm (Public API của `app/updater.py`)
-1. `parse_version(version_str: str) -> tuple[int, ...]`: Chuẩn hóa chuỗi phiên bản (`"v1.2.0"` $\rightarrow$ `(1, 2, 0)`).
-2. `is_newer_version(remote_ver: str, local_ver: str) -> bool`: So sánh phiên bản ngữ nghĩa (Semantic Versioning).
-3. `ReleaseInfo` (dataclass): `version: str`, `download_url: str`, `sha256: str`, `release_notes: str`, `asset_name: str`.
-4. `check_for_update(current_version: str, repo: str = GITHUB_REPO, api_url: Optional[str] = None, timeout: float = 5.0) -> Optional[ReleaseInfo]`:
-   - Truy vấn GitHub Releases API (`releases/latest`).
-   - Hỗ trợ đọc mã băm SHA-256 từ nội dung Release Notes (`SHA256: <64-hex>`) hoặc từ tệp đính kèm `version.json`.
-   - Trả về `ReleaseInfo` nếu có bản mới hơn `current_version`, ngược lại trả về `None`.
-5. `compute_sha256(file_path: Path) -> str` & `verify_sha256(file_path: Path, expected_sha256: str) -> bool`:
-   - Kiểm tra toàn vẹn gói tải về bằng thuật toán băm SHA-256 theo từng chunk 64KB.
-6. `download_release_asset(release: ReleaseInfo, dest_dir: Path, on_progress: Optional[Callable[[int, int], None]] = None, timeout: float = 30.0) -> Path`:
-   - Bắt buộc giao thức `https://`.
-   - Tải gói cập nhật về thư mục tạm, kiểm tra cổng `Integrity Gate` (khớp mã băm SHA-256). Nếu lệch mã băm, lập tức xóa file tạm và quăng `UpdateError`.
-7. `safe_extract_zip(zip_path: Path, staging_dir: Path) -> list[Path]`:
-   - Giải nén gói cập nhật vào thư mục staging.
-   - Chặn tuyệt đối lỗ hổng **Zip Slip (Path Traversal)** (mọi đường dẫn chứa `../` thoát khỏi `staging_dir` đều bị từ chối và quăng `UpdateError`).
-   - Bỏ qua mọi tệp trùng tên với `PROTECTED_USER_ITEMS`.
-8. `apply_staged_update(staging_dir: Path, target_dir: Path) -> list[Path]`:
-   - Sao lưu tệp hiện tại sang `.bak` trước khi ghi đè tệp mới từ `staging_dir` vào `target_dir`.
-   - Tuyệt đối không đụng chạm tới bất kỳ tệp/thư mục nào trong `PROTECTED_USER_ITEMS`.
-   - **Rollback tự động**: Nếu quá trình ghi đè bất kỳ tệp nào gặp lỗi giữa chừng, tự động khôi phục toàn bộ tệp `.bak` về trạng thái ban đầu.
-9. `spawn_standalone_updater(package_path: Path, target_dir: Path, current_pid: Optional[int] = None, relaunch_exe: Optional[Path] = None) -> Any`:
-   - Khởi chạy tiến trình thứ 2 độc lập (`updater.exe` hoặc `python updater_runner.py`) để thực hiện hoán đổi binary sau khi tiến trình chính thoát.
-
+**100% Cấu hình trong App — Loại bỏ hoàn toàn `Cau_hinh.xlsx`:**
+- Mọi kết nối SQLite bật bắt buộc:
+  - `PRAGMA journal_mode=WAL;`
+  - `PRAGMA busy_timeout=5000;`
+  - `PRAGMA foreign_keys=ON;`
+- Quản lý lược đồ qua bảng `schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`.
+- **Các bảng dữ liệu**:
+  1. `app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)`: lưu `sender`, `display_name`, `attach_dir`, `cc_json`, `logo_path`, `subject_tpl`, `body_tpl`, `excel_tpl`, `pdf_tpl`, `pacing_seconds`, `max_retries`, `theme`, `onboarding_completed`, `last_source_dir`. *(Tuyệt đối không lưu mật khẩu hay token vào bảng này!)*
+  2. `suppliers(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, norm_name TEXT NOT NULL UNIQUE, recipients_json TEXT NOT NULL, aliases_json TEXT NOT NULL DEFAULT '[]', note TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0)`
+     - `norm_name = normalize_name(name)` dùng chung chuẩn `unicodedata.normalize("NFC", name).strip().lower()`.
+  3. `send_history(id INTEGER PRIMARY KEY AUTOINCREMENT, batch_id TEXT NOT NULL DEFAULT '', sent_at TEXT NOT NULL, month INTEGER NOT NULL, year INTEGER NOT NULL, kind TEXT NOT NULL, supplier TEXT NOT NULL, norm_supplier TEXT NOT NULL, recipients TEXT NOT NULL, subject TEXT NOT NULL, attachments TEXT NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL)`
+     - Index: `idx_history_period_norm(year, month, kind, status, norm_supplier)`.
+     - Hỗ trợ truy vấn trực tiếp cho màn hình Lịch sử In-App (`query_history`, `failed_suppliers_in_period`, `period_summary`) và kết xuất báo cáo `Lich_su_gui.xlsx` (chạy trên Background Worker, giữ định dạng chuỗi `"09"` cho cột Tháng, chống CSV/Excel Formula Injection).
 
 ---
 
-## 8. Hợp Đồng Nâng Cấp Phiên Bản `v2.0.0` (HTML Email Template, Inline Logo CID, Excel History Report & Telemetry)
+## 4. Hợp Đồng Động Cơ Khớp File Thông Minh 3 Tầng (`app/domain/matching.py`)
 
-### 8.1. Mẫu Email HTML Doanh Nghiệp & Nhúng Logo Inline CID (`app/mailer.py`, `app/config.py`)
-1. **Nhãn cấu hình tùy chọn mới trong Sheet `Gmail`**:
-   - `LBL_LOGO = "Logo chữ ký (không bắt buộc)"` (mặc định `""`, người dùng có thể điền đường dẫn tương đối như `logo.png` hoặc đường dẫn tuyệt đối tới ảnh `.png`/`.jpg`).
-   - Trường `Settings.logo_path: str = ""` (tự động migrate bổ sung vào `Cau_hinh.xlsx` cũ thông qua `migrate_config_if_needed()`).
-2. **Hàm dựng nội dung HTML chuẩn doanh nghiệp**:
-   - `build_html_body(body_text: str, logo_cid: Optional[str] = None) -> str`:
-     - Chuyển đổi văn bản thuần sang HTML định dạng `Segoe UI, Arial, sans-serif` (cỡ chữ `14px`, màu `#201F1E`, khoảng cách dòng `1.6`).
-     - Tự động nhận diện khối chữ ký bên dưới dòng phân cách (`---` hoặc `___`) để định dạng chữ ký doanh nghiệp trang trọng; nếu có `logo_cid`, chèn thẻ `<img src="cid:{logo_cid}" ...>` ngay dưới chữ ký.
-     - Nếu `body_text` đã chứa thẻ HTML (`<html>`, `<p>`, `<br>`, `<div>`, `<table>`), bảo toàn cấu trúc HTML của người dùng và bổ sung ảnh logo nếu có.
-3. **Thông điệp MIME Multipart (`build_message`)**:
-   - Luôn gửi đồng thời cả `text/plain` (fallback tương thích 100%) và `text/html` (`msg.add_alternative(..., subtype="html")`).
-   - Nếu `settings.logo_path` được cấu hình và tệp ảnh tồn tại, nhúng ảnh vào phần HTML qua `Content-ID` (Inline CID) để hiển thị trực tiếp trong chữ ký mà không làm lẫn với danh sách file Excel/PDF đính kèm.
+**Nguyên tắc tối thượng: Zero Wrong-Vendor Delivery (100% Branch Coverage).**
 
-### 8.2. Xuất Báo Cáo Lịch Sử Ra File Excel Định Dạng Đẹp (`Lich_su_gui.xlsx` — `app/history.py`)
-1. `EXCEL_HISTORY_PATH = APP_DIR / "Lich_su_gui.xlsx"`
-2. `export_sqlite_to_excel(excel_path: Path = EXCEL_HISTORY_PATH, db_path: Path = DB_PATH) -> bool`:
-   - Kết xuất toàn bộ lịch sử từ SQLite `history.db` ra file Excel `.xlsx` thông qua `openpyxl`.
-   - Định dạng bảng chuyên nghiệp:
-     - Dòng tiêu đề nền xanh đậm `#1F4E78`, chữ trắng in đậm, cố định tiêu đề (`freeze_panes = "A2"`).
-     - Cột `Tháng` lưu chuỗi `"09"` với `number_format = "@"` (Text) để Microsoft Excel không bao giờ cắt mất số `0` ở đầu.
-     - Tô màu nền xanh nhạt (`#E2EFDA`) cho dòng `"Thành công"` và cam/đỏ nhạt (`#FCE4D6`) cho dòng `"Lỗi"`.
-     - Chống Formula Injection (`_sanitize_csv_field`).
+### 4.1. Tiền xử lý & Lọc rác bắt buộc
+- Lọc bỏ tuyệt đối trước khi chấm điểm: file tạm Office (`~$*`, `.~lock*`, `*.tmp`, `*.bak`), file ẩn hệ thống (`desktop.ini`, `Thumbs.db`, `.DS_Store`), file không đúng phần mở rộng được phép (Excel: `.xlsx`, `.xls`, `.xlsm`; PDF: `.pdf`), file 0 byte, đường dẫn thoát khỏi thư mục nguồn (Path Traversal).
+- Chuẩn hóa Unicode **NFC** cho toàn bộ tên file và tên NCC trước khi so sánh (triệt tiêu lỗi tên file tiếng Việt NFD từ macOS/Zalo/Google Drive).
 
-### 8.3. Telemetry Tốc Độ Gửi (`mail/phút`) & Bộ Lọc Nhanh Trên `PreviewDialog`
-1. `MainWindow` tính toán và hiển thị tốc độ gửi thực tế theo đơn vị `mail/phút` bên cạnh phần trăm tiến độ và đồng hồ đếm ngược `ETA`.
-2. `PreviewDialog` hiển thị thanh tóm tắt số lượng theo từng trạng thái (`Sẵn sàng`, `Đã gửi rồi`, `Lỗi`, `Không gửi`) và ô tìm kiếm/lọc nhanh theo tên nhà cung cấp.
+### 4.2. Trích xuất Kỳ Tháng/Năm & Chế độ
+- `extract_period_from_text(text) -> Optional[tuple[int, int]]`: Nhận diện an toàn các mẫu có ranh giới số rõ ràng (`09.2026`, `9.2026`, `2026-09`, `2026_09`, `T09-2026`, `Thang 9 nam 2026`), tuyệt đối **không khớp nhầm số dính liền** (`19.2026`, `90`, `20260`).
+- `suggest_period(files, default_attach_root, today)`:
+  1. Ưu tiên majority vote từ tên thư mục / tên file vừa chọn/kéo-thả.
+  2. Nếu chưa chọn file: tìm thư mục kỳ mới nhất trong `default_attach_root` có chứa file Excel/PDF thật.
+  3. Fallback theo chu kỳ kế toán: `today.day <= 15` → tháng trước; `today.day >= 16` → tháng hiện tại.
+- `detect_send_kind(files)`: Chỉ có Excel → `Tạm tính`; có cả Excel & PDF → `Chốt` (kèm cờ `partial_pdf_warning` nếu số PDF < số Excel).
+
+### 4.3. Quy tắc Khớp File 3 Tầng (Triệt tiêu bẫy `ACE` vs `AHC`)
+Với mỗi NCC đang bật và từng loại file cần thiết (Excel; thêm PDF nếu `Chốt`):
+1. **Lọc theo kỳ (Period Gate)**: Nếu tên file chứa `(month, year)` rõ ràng nhưng **khác kỳ đang chọn** → gắn nhãn `WRONG_PERIOD` (Tầng Đỏ — KHÔNG tự động đính kèm).
+2. **Khớp ranh giới từ (Token Boundary Match) — Longest-Match-First**:
+   - Kiểm tra tên NCC và từng `alias` (đã chuẩn hóa NFC + lowercase) xuất hiện như một **token độc lập** (bao bởi đầu/cuối chuỗi hoặc ký tự ngăn cách không phải chữ/số: khoảng trắng, `.`, `_`, `-`, `(`, `)`, `[`, `]`).
+   - Ưu tiên tên dài hơn trước (`T&T Logistics` > `T&T`, `HR Partner` > `HR`, `ACE2` > `ACE`, `AB` > `A`) để **chống đụng độ chuỗi con (Substring/Prefix Collision)**.
+   - **Kiểm tra chéo âm tính**: Nếu một file chứa token của >= 2 NCC khác nhau (sau khi loại quan hệ chuỗi con đã thắng dài nhất) → đánh dấu `CONFLICT` (**Tầng Đỏ — Khóa cứng cả 2 NCC**).
+3. **Phân tầng trạng thái `MatchStatus`**:
+   - **`EXACT`** *(Tầng Xanh — Auto Ready)*: Khớp đúng 100% tên file render từ template (NFC).
+   - **`AUTO_MATCHED`** *(Tầng Xanh — Auto Ready)*: Khớp duy nhất 1 file cùng loại qua Token Boundary Match với `name`/`aliases` + không lệch kỳ + không xung đột với NCC khác.
+   - **`NEEDS_REVIEW`** *(Tầng Vàng — **Mặc định KHÔNG tick gửi**, bắt buộc user bấm xác nhận)*: Khớp gần đúng (fuzzy trên phần tên đã tước tiền tố/hậu tố chung & kỳ tháng, ngưỡng >= 0.80), chỉ khi ứng viên không chứa token của NCC khác và không đang gắn cho NCC khác.
+   - **`AMBIGUOUS`** *(Tầng Đỏ — Khóa cứng)*: 1 NCC có >= 2 file ứng viên cùng loại (vd `ACE_v1.xlsx` và `ACE_final.xlsx`).
+   - **`CONFLICT`** *(Tầng Đỏ — Khóa cứng)*: 1 file vật lý (theo đường dẫn hoặc `SHA-256`) trùng cho >= 2 NCC.
+   - **`WRONG_PERIOD`** *(Tầng Đỏ — Khóa cứng)*: File khớp tên NCC nhưng ghi sai tháng/năm.
+   - **`MISSING` / `INVALID_FILE`** *(Tầng Đỏ — Khóa cứng)*: Thiếu file, file 0 byte, hoặc tổng dung lượng (tính cả Logo nếu có) > `18 MB`.
+4. **Global 1–1 Disjoint Invariant**: Kiểm tra cuối vòng lặp đảm bảo 0 có 2 NCC nào dùng chung cùng đường dẫn hoặc cùng `SHA-256`.
+5. **Auto-Discovery (`discover_unknown_suppliers`)**: Các file Excel/PDF hợp lệ chưa gán cho NCC nào được gom theo tên ứng viên trích xuất từ template đảo ngược để gợi ý thêm NCC mới 1-click.
+
+---
+
+## 5. Hợp Đồng Lõi Gửi Mail, Lịch Sử & Telemetry (`app/adapters/smtp_mailer.py`, `app/application/batch_runner.py`)
+
+1. **TOCTOU Hash Pinning**: Mỗi `AttachmentMatch` lưu sẵn `sha256` tại thời điểm người dùng xem trước/xác nhận. Ngay trước khi gắn vào `EmailMessage`, `build_message()` đối chiếu lại `sha256` thực tế — nếu khác, hủy gửi NCC đó với lỗi `SendErrorKind.ATTACHMENT_CHANGED`.
+2. **SMTP SSL (465) → STARTTLS (587) Fallback & Chống Gửi Trùng**:
+   - Thử kết nối `SMTP_SSL(smtp.gmail.com, 465)` trước; nếu gặp lỗi mạng/timeout kết nối ban đầu (`OSError`), tự động thử `SMTP(smtp.gmail.com, 587)` + `starttls(context=ssl.create_default_context())`.
+   - Cố định header `Message-ID` cho mỗi `MailPlan` trước vòng lặp retry; gọi `server.noop()` kiểm tra socket sống trước khi gửi `DATA` để triệt tiêu nguy cơ retry gửi trùng sau `DATA`.
+   - Phân loại lỗi tường minh bằng `SendErrorKind` (`AUTH`, `RECIPIENT_REFUSED`, `PARTIAL_REFUSED`, `ATTACHMENT_IO`, `ATTACHMENT_CHANGED`, `TRANSIENT_NETWORK`, `UNKNOWN`) — không phân loại bằng chuỗi tiếng Việt.
+3. **Explicit Logo & HTML Sanitization**:
+   - Chỉ nhúng logo khi `settings.logo_path` được chọn rõ ràng và file tồn tại (cấm tự nhúng `APP_DIR/logo.png` âm thầm). Cộng dung lượng logo vào giới hạn `18 MB`.
+   - Mọi nội dung HTML preview & gửi đi qua `nh3.clean(...)` với danh sách thẻ/thuộc tính an toàn (loại bỏ `<script>`, `on*`, `javascript:`, ảnh remote không cho phép).
+4. **Worker-Side Durable Commit & Pause-Aware Telemetry**:
+   - `BatchRunner` ghi kết quả vào `HistoryRepository` **ngay trên Worker Thread** ngay khi SMTP trả kết quả, TRƯỚC khi bắn sự kiện tiến độ về UI.
+   - Khi đóng cửa sổ lúc đang gửi: kích hoạt `cancel_event` và chờ tối đa `5s` cho email hiện tại hoàn tất & commit DB (Graceful Shutdown).
+   - Telemetry theo dõi `paused_seconds` tích lũy (tiêm `Clock` để `pytest` test tức thì trong `0ms`): `active_elapsed = (now - start) - paused_seconds`.
+5. **Gửi thử an toàn (`send_test_email`)**:
+   - Ép `recipients = [test_email hoặc settings.sender]`, `cc = []`, `subject = "[GỬI THỬ] " + plan.subject`, giữ nguyên HTML + Logo CID + đính kèm thật (nếu có), **tuyệt đối không ghi vào `send_history`**.
+
+---
+
+## 6. Hợp Đồng Cầu Nối UI & 6 Rào Chắn Bảo Mật PyWebView (`app/ui/bridge.py`, `app/ui/window.py`)
+
+1. **6 Rào Chắn Bảo Mật Bắt Buộc**:
+   - `<iframe sandbox="" srcdoc="...">` cho toàn bộ khung xem trước Email HTML (không `allow-scripts`, không `allow-same-origin`).
+   - Sanitize HTML phía Python bằng `nh3` trước khi trả về UI.
+   - Strict CSP trong `index.html` (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' data:; connect-src 'none';`).
+   - Strict Whitelist JS-API Facade (`bridge.py`): chỉ nhận ID / giá trị đã xác thực; chọn thư mục/file/logo qua hộp thoại OS native (`window.create_file_dialog`) hoặc danh sách đường dẫn đã qua kiểm tra từ sự kiện Drag & Drop thật của WebView2; không bao giờ trả mật khẩu/token.
+   - Tắt DevTools (`debug=False`) ở bản đóng gói; hàm `open_external_url(url)` chỉ cho phép whitelist `https://myaccount.google.com/...` và `https://github.com/minhhai1104/Sending_gmail_for_Mrs_Ha/...`.
+   - Đặt WebView2 `storage_path = %LOCALAPPDATA%\GmailAutoMailer\webview` (tách biệt hoàn toàn khỏi thư mục cài đặt ứng dụng để không bao giờ khóa tệp khi OTA).
+2. **Filter-Safe Selection**:
+   - Khi người dùng bấm Gửi trong lúc bộ lọc tìm kiếm đang kích hoạt và có NCC được tick nhưng đang bị ẩn: UI hiển thị hộp thoại xác nhận nêu rõ số lượng đang hiển thị vs đang bị ẩn, cho phép chọn *"Chỉ gửi các NCC đang lọc"* hoặc *"Gửi toàn bộ đã tick"*.
+
+---
+
+## 7. Hợp Đồng OTA Hardening & Bộ Cài 1-Click (`app/adapters/ota_updater.py`, `updater_runner.py`, `installer/`)
+
+1. **Mandatory SHA-256 & Domain Allowlist**:
+   - `verify_sha256()` trả về `False` nếu `expected_sha256` rỗng hoặc không đúng 64 ký tự hex.
+   - Allowlist host HTTPS: `api.github.com`, `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`.
+   - `updater_runner.py` viết thuần Python stdlib (không import `app.*`), kiểm tra kết quả `wait_for_process_exit()`, tự copy sang `%TEMP%` khi chạy, dọn file `.bak` và giữ nguyên `PROTECTED_USER_ITEMS`.
+2. **Đóng gói `--onedir` + Bộ cài 1-Click Per-User (`Setup.exe`)**:
+   - Nhúng `assets/app_icon.ico` (6 kích cỡ) + `build/version_info.txt` (Haesung Vina Co., Ltd., v3.0.0) + `SetCurrentProcessExplicitAppUserModelID("HaesungVina.GmailAutoMailer.3")`, tắt `upx`.
+   - Bộ cài Inno Setup `installer/setup.iss` cài Per-User vào `%LOCALAPPDATA%\Programs\HaesungVina\GmailAutoMailer`, không yêu cầu Admin UAC, kiểm tra Edge WebView2 Runtime, tạo Shortcut Desktop + Start Menu + Uninstall chuẩn Windows.

@@ -1,36 +1,27 @@
-# Gửi mail hàng loạt cho nhà cung cấp (qua Gmail) — Phiên bản v2.0.0
+# Hướng Dẫn Sử Dụng Nhanh — Gmail Auto Mailer v3.1.0 (Haesung Vina)
 
-## 1. Cài đặt & Triển khai cho người dùng
-
-### Cách 1: Dùng bộ file EXE đóng gói sẵn (Khuyên dùng — Không cần cài Python)
-1. Copy thư mục `Ban_phat_hanh` (gồm `Gui_mail_nha_cung_cap.exe` và `updater.exe`) sang máy cần dùng.
-2. Bấm đúp `Gui_mail_nha_cung_cap.exe` để mở ứng dụng.
-3. Ở lần chạy đầu tiên, ứng dụng tự tạo file cấu hình mẫu `Cau_hinh.xlsx` ngay cạnh file `.exe`.
-4. Tiến trình `updater.exe` đi kèm giúp ứng dụng tự động cập nhật phiên bản mới (OTA) từ GitHub Releases mà không làm mất dữ liệu cấu hình hay lịch sử gửi của bạn.
-
-> **Lưu ý**: Lần đầu mở trên máy mới, nếu Windows SmartScreen hiện cảnh báo, chọn **More info (Thêm thông tin) → Run anyway (Vẫn chạy)**.
-
-### Cách 2: Chạy từ mã nguồn Python
-1. Máy cần có **Python 3.10 trở lên** (tải tại https://www.python.org/downloads/, nhớ tick *Add python.exe to PATH*).
-2. Bấm đúp `Chay_ung_dung.bat`.
-3. Muốn đóng gói lại bộ file `.exe` sau khi sửa code: chạy `Dong_goi_exe.bat`.
+## 1. Cài đặt chỉ với 1 cú click (Không cần cài Python, Không cần quyền Admin)
+1. Chạy file bộ cài **`Cai_dat_Gui_mail_Haesung_Vina_v3.1.0.exe`** (trong thư mục `Ban_phat_hanh`).
+2. Bấm **Install** — bộ cài tự động tạo biểu tượng **Gmail Auto Mailer** có logo thương hiệu ngoài màn hình chính (Desktop) & Start Menu và tự mở ứng dụng ngay lập tức.
+3. Toàn bộ cấu hình, mật khẩu (mã hóa bằng Windows DPAPI) và lịch sử gửi được lưu riêng tại `%LOCALAPPDATA%\GmailAutoMailer` — an toàn tuyệt đối khi cập nhật phiên bản mới (OTA).
 
 ---
 
-## 2. Hướng dẫn sử dụng lần đầu
-1. Mở file `Cau_hinh.xlsx` (bấm nút **Mở file cấu hình** trong app). Sheet **Hướng dẫn** giải thích chi tiết từng bước.
-2. Điền **Gmail**, **Mật khẩu ứng dụng (16 ký tự)**, và **Mail người nhận** của từng nhà cung cấp rồi lưu file (`Ctrl+S`).
-   - *Bảo mật tự động*: Sau lần đọc đầu tiên, ứng dụng tự động mã hóa lưu mật khẩu vào kho an toàn trên máy và ẩn mật khẩu trong file Excel thành `******** (Đã lưu an toàn trên máy)` để bạn yên tâm không lộ mật khẩu nếu lỡ gửi file Excel cho người khác.
-   - *(Tùy chọn)* Bạn có thể đặt file ảnh `logo.png` cạnh file `.exe` (hoặc điền đường dẫn ở dòng `Logo chữ ký` trong sheet `Gmail`) để tự động nhúng logo công ty vào chữ ký email HTML.
-3. Bỏ file Excel và PDF của tháng vào thư mục `Dinh_kem\năm-tháng` (ví dụ `Dinh_kem\2026-09`). Bấm nút **Mở thư mục đính kèm** để mở nhanh đúng thư mục của kỳ đang chọn.
-4. Trong app: Chọn **Tháng**, **Năm**, chế độ **Tạm tính** (chỉ đính kèm Excel) hoặc **Chốt** (đính kèm Excel + PDF) → bấm **XEM TRƯỚC & GỬI**.
-5. Tại cửa sổ Xem trước:
-   - Dùng ô **🔍 Lọc NCC** để tìm nhanh đối tác.
-   - **Nhấp đúp chuột** (hoặc nhấn phím `Space`) vào dòng nhà cung cấp bất kỳ để **Chọn (`☑`)** hoặc **Bỏ chọn (`☐`)** gửi lẻ từng đối tác mà không cần sửa file Excel.
-   - Bấm **Xác nhận & Gửi**.
+## 2. Thiết lập lần đầu (60 giây ngay trong ứng dụng — KHÔNG cần dùng Excel)
+Lần mở đầu tiên, trợ lý thiết lập 3 bước sẽ tự mở:
+1. **Bước 1 — Kết nối Gmail**: Nhập Gmail, Tên hiển thị và **Mật khẩu ứng dụng Google (16 ký tự)**. Bấm nút *"Lấy Mật khẩu 16 ký tự ↗"* ngay trên màn hình để mở thẳng trang Google, dán vào và bấm **Kiểm tra Gmail & Tiếp tục**.
+2. **Bước 2 — Email Nhà cung cấp**: Nhập email nhận báo cáo của từng nhà cung cấp (nhiều email cách nhau bằng dấu `;`).
+3. **Bước 3 — Chữ ký & Logo**: Chọn ảnh logo công ty (nếu có), xem trước ngay mẫu email HTML thật và bấm **Hoàn tất**.
 
 ---
 
-## 3. Tính năng an toàn & Lịch sử gửi
-- **Điều khiển trực tiếp khi đang gửi**: Có thể bấm **⏸ Tạm dừng**, **▶ Tiếp tục** hoặc **⏹ Hủy gửi** bất cứ lúc nào.
-- **Lịch sử thông minh chống khóa file**: Mọi kết quả gửi đều được lưu an toàn vào cơ sở dữ liệu nội bộ `history.db` và tự động xuất ra báo cáo Excel định dạng màu `Lich_su_gui.xlsx` (kèm `Lich_su_gui.csv`) khi bấm **Xem lịch sử gửi**.
+## 3. Gửi báo cáo hàng tháng chỉ trong 3 bước
+1. **Kéo thả thư mục** (hoặc bấm **Chọn thư mục / Chọn file rời**) chứa báo cáo Excel & PDF của tháng vào ứng dụng. Hệ thống tự động nhận diện tháng/năm, tự chọn chế độ **Tạm tính** (chỉ Excel) hay **Chốt** (Excel + PDF) và tự khớp an toàn vào từng nhà cung cấp.
+2. **Kiểm tra trực tiếp**: Bảng danh sách 1 dòng hiển thị thẳng cột `Email · Excel · PDF · Trạng thái` (dùng phím `↑ / ↓` để lướt nhanh 50+ nhà cung cấp và bấm tiêu đề `Trạng thái` để gom mục lỗi lên đầu). Bấm trực tiếp vào ô đỏ `✕` để thêm email / chọn file, hoặc ô vàng `?` để xem và duyệt file bên khung **Xem trước Email HTML + Chữ ký + Logo 1:1**. Có thể bấm **Gửi thử cho tôi** để kiểm tra hộp thư trước khi gửi thật.
+3. **Bấm Gửi ngay**: Theo dõi tiến độ trực tiếp (tốc độ `mail/phút`, `ETA`, nút **Tạm dừng / Tiếp tục / Hủy**). Nếu có nhà bị lỗi mạng, bấm **Gửi lại nhà bị lỗi** trong 1 click.
+
+---
+
+## 4. Tra cứu Lịch sử & Cập nhật tự động
+- Mở mục **Lịch sử gửi** ngay trong ứng dụng để lọc theo tháng/năm/trạng thái hoặc bấm **Xuất báo cáo Excel** khi cần lưu trữ kế toán.
+- Khi có phiên bản mới trên GitHub Releases, thanh thông báo sẽ tự hiện ở đầu ứng dụng — bấm **Cập nhật ngay** để tự động nâng cấp mà không mất bất kỳ dữ liệu nào.

@@ -1,37 +1,32 @@
-# === Dữ liệu cá nhân & Bảo mật (không đồng bộ lên Git) ===
-Cau_hinh.xlsx
-Lich_su_gui.csv
-Lich_su_gui.xlsx
-history.db
-history.db-journal
-history.db-wal
-history.db-shm
-.credentials.dat
-.ota_token.dat
-*.vault.dat
-
-# === File tạm Excel ===
-~$*.xlsx
-
-# === Python & Tooling cache ===
+# Python cache & build artifacts
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
-# === Build artifacts ===
-build/
-dist/
-Ban_phat_hanh/
-build/*.spec
-
-# === Thư mục file đính kèm (dữ liệu riêng) ===
+# User secrets, vaults & runtime data (ZERO PLAINTEXT SECRETS)
+.credentials.dat
+.ota_token.dat
+*.dpapi
+*.vault.dat
+app_data.db*
+history.db*
+Cau_hinh.xlsx
+Lich_su_gui.csv
+Lich_su_gui.xlsx
 Dinh_kem/
+Ban_phat_hanh/
+document.docx
+~$*.xlsx
 
-# === Windows ===
+# OS files
 desktop.ini
 Thumbs.db
-
-# === Tài liệu nội bộ ===
-document.docx
+.DS_Store

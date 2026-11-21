@@ -6,29 +6,33 @@ Ghi nhận các quyết định kiến trúc đã thống nhất qua quá trình
    - Thống nhất tổ chức đội ngũ 7 Sub-Agents chuyên trách: `pm-agent`, `designer-agent`, `be-agent`, `fe-agent`, `tester-agent`, `qa-agent`, `devops-agent`.
    - Cấu trúc thư mục `.agents/` là nguồn sự thật duy nhất (Single Source of Truth), kế thừa trọn vẹn 50+ kỹ năng từ `Backup-data-to-NAS` và `Nguyen-Ba-Toc`, kết hợp bản đồ tri thức `.agents/knowledge/` và bộ nhớ vĩnh cửu `.agents/memory/`.
 
-2. **ADR-002: Cơ chế Bảo mật Thông tin Đăng nhập Hybrid**:
-   - Thay vì lưu plaintext mật khẩu ứng dụng Gmail (16 ký tự) vĩnh viễn trong file `Cau_hinh.xlsx` (tiềm ẩn nguy cơ lộ lọt khi chia sẻ file), hệ thống áp dụng cơ chế Hybrid:
-     - Cho phép nhập mật khẩu lần đầu từ GUI hoặc Excel.
-     - Tự động lưu mật khẩu an toàn vào **Windows Credential Manager (`keyring`)** hoặc mã hóa AES-256 nội bộ.
-     - Hỗ trợ làm sạch, xóa plaintext mật khẩu khỏi file Excel sau khi đã nạp an toàn vào hệ thống.
+2. **ADR-002 (Supersede v3.0): Bảo mật Thông tin Đăng nhập bằng Windows DPAPI + Write-Only UI**:
+   - Từ v3.0 trở đi, ứng dụng **KHÔNG còn đọc/ghi mật khẩu qua `Cau_hinh.xlsx`** và **loại bỏ `_machine_secret()` / `_PORTABLE_OTA_SECRET` hardcode**.
+   - Toàn bộ Mật khẩu ứng dụng Gmail (16 ký tự) và Token nhạy cảm được mã hóa bằng **Windows DPAPI thuần (`ctypes.windll.crypt32.CryptProtectData`)** lưu tại `%LOCALAPPDATA%\GmailAutoMailer\vault.dpapi` (tách biệt hoàn toàn khỏi thư mục cài app, gắn chặt tài khoản Windows cục bộ, không cần cài thư viện ngoài).
+   - Giao diện Cài đặt áp dụng nguyên tắc **Write-Only**: không bao giờ nạp ngược mật khẩu thật ra ô nhập liệu, mọi log/traceback đi qua bộ lọc `redact_secrets()`.
 
-3. **ADR-003: Chuyển đổi Lưu trữ Lịch sử sang SQLite nội bộ (`history.db`) & Pacing Chống Spam**:
-   - Lịch sử gửi mail được lưu trữ chính thức vào SQLite (`history.db`) để triệt tiêu lỗi xung đột khóa file (`PermissionError: [Errno 13] Permission denied`) khi người dùng đang mở xem file trong Microsoft Excel trên Windows.
-   - Hỗ trợ hàm tự động xuất/đồng bộ sang `Lich_su_gui.csv` và Excel xem ngay.
-   - Bắt buộc áp dụng cơ chế **Pacing thông minh** (giãn cách gửi 1.5s - 3.0s giữa các mail) và Exponential Backoff Retry để tuân thủ Gmail SMTP sending quota và chống kích hoạt bộ lọc chống spam của Google.
+3. **ADR-003 (Nâng cấp v3.0): SQLite WAL Single Source of Truth (`app_data.db` & `history.db`) + Pacing & SMTP 465/587**:
+   - **Cấu hình 100% trong App** (theo chỉ thị chốt của Chủ dự án ngày 21/11/2026: bỏ hoàn toàn cấu hình qua Excel `Cau_hinh.xlsx`, không cần nhập/xuất cấu hình Excel cũ).
+   - Lưu trữ cấu hình (Gmail settings, danh sách NCC, mẫu Email/chữ ký, tùy chọn giao diện) và lịch sử gửi vào SQLite chuẩn hóa có `PRAGMA journal_mode=WAL`, `busy_timeout`, `schema_migrations`.
+   - Bắt buộc ghi lịch sử trên Worker Thread ngay sau `250 OK` (chống mất log khi đóng app), hỗ trợ xuất báo cáo lịch sử Excel `.xlsx` trên luồng nền.
+   - Giữ cơ chế **Smart Pacing (1.5s–3.0s)**, **Exponential Backoff Retry** (cố định `Message-ID` tránh gửi trùng), và **tự động fallback SMTP `465 (SSL)` -> `587 (STARTTLS)`**.
 
-4. **ADR-004: Giao diện Tkinter Modern Enterprise thuần (Lightweight & Zero-Bloat)**:
-   - Giữ vững công nghệ Tkinter thuần để đảm bảo thời gian khởi động tức thì, tiêu thụ RAM cực thấp (<50MB) và file `.exe` đóng gói nhỏ gọn (<15MB).
-   - Tái thiết kế toàn diện theo hệ thống thiết kế `DESIGN.md` (Modern Enterprise Precision, bảng màu WCAG 2.1 AA, Dark/Light mode qua `ttk.Style`, telemetry thời gian thực, nút Tạm dừng/Hủy gửi trực tiếp).
+4. **ADR-004 (Supersede v3.0): Giao diện Thương mại Modern Enterprise qua PyWebView + Microsoft Edge WebView2**:
+   - Nâng cấp từ Tkinter thuần sang **PyWebView + Edge WebView2** (sẵn có trên Windows 10/11) với Web UI HTML/CSS/JS tĩnh nội bộ chuẩn **Modern Enterprise Precision v3.0** (Light/Dark Mode 100%, 6 màn hình In-App: Wizard 60s, Live Send Workspace, Quản lý NCC, Trình soạn Mẫu Email + Live HTML Preview thật 1:1, Lịch sử gửi In-App, Cài đặt).
+   - Bắt buộc áp **6 rào chắn bảo mật QA**: `<iframe sandbox="">` cho email preview, sanitize HTML phía Python, Strict CSP, Whitelist JS-API Facade (không trả secret, không nhận đường dẫn file tự do), tắt DevTools bản release, và đặt WebView2 `storage_path` tại `%LOCALAPPDATA%\GmailAutoMailer\webview` (chống khóa DLL khi OTA).
 
-5. **ADR-005: Tiêu chuẩn Kiểm thử 3 Khía Cạnh, Kiểm toán QA & Đóng gói Tự động**:
-   - Áp dụng `pytest` kiểm thử tự động 3 khía cạnh: Happy Path, Edge Cases (Unicode, file rỗng/lớn, đường dẫn dài), Chaos Cases (rớt mạng, sai pass, khóa file, cancel giữa chừng).
-   - Kiểm toán tĩnh bằng `ruff` và `mypy`.
-   - Đóng gói bằng PyInstaller `.spec` file chuẩn hóa và thiết lập GitHub Actions CI tự động hóa.
+5. **ADR-005 (Nâng cấp v3.0): Kiến trúc Headless ViewModel + Kiểm thử 3 Khía Cạnh (`>=90%` coverage)**:
+   - Tách kiến trúc sạch `domain -> ports -> application (ViewModels) -> adapters -> ui` để `pytest` kiểm thử 100% logic màn hình, Retry, Pause/Resume và ma trận **Chống khớp nhầm NCC (`matching.py` 100% branch coverage)** với `FakeClock` chạy `<5s`.
+   - Kiểm toán tĩnh bằng `ruff check` (kèm rule bảo mật `S` & `B`), `mypy` strict và kiểm định thực tế trên file `.exe`.
 
+6. **ADR-006 (Nâng cấp v3.0): OTA 2 Tiến Trình & Bộ Cài 1-Click Chuẩn Thương Mại (`Setup.exe`)**:
+   - Đóng gói App chính dạng `--onedir` (khởi động nhanh gấp 3 lần) kèm **Icon thương hiệu Haesung Vina `.ico`** (6 cỡ) và đầy đủ **Windows Version Info** (`Haesung Vina Co., Ltd.`), tắt `upx`.
+   - Tạo **Bộ cài 1-Click Per-User (`Setup.exe` — Inno Setup)** cài vào `%LOCALAPPDATA%\Programs\HaesungVina\GmailAutoMailer`, không cần quyền Admin UAC, tự tạo Shortcut Desktop & Start Menu, tự kiểm tra Edge WebView2 Runtime.
+   - Tách `updater_runner.py` thuần stdlib (giảm ~50% dung lượng `updater.exe`), bắt buộc xác thực SHA-256 (rỗng = từ chối) + domain allowlist GitHub.
 
-6. **ADR-006: Kiến Trúc Tự Động Cập Nhật OTA Qua Mô Hình 2 Tiến Trình (Launcher/Updater + App Chính) & GitHub Releases**:
-   - Triệt tiêu hoàn toàn rào cản Windows File Locking (`ERROR_ACCESS_DENIED` khi ghi đè tệp `.exe` đang chạy) bằng cách phân tách 2 tiến trình:
-     - Ứng dụng chính (`Gui_mail_nha_cung_cap.exe`) kiểm tra bản cập nhật ngầm qua GitHub Releases API (`releases/latest`) và tải bản mới về thư mục tạm.
-     - Tiến trình con độc lập (`updater.exe`) được kích hoạt khi người dùng xác nhận nâng cấp; Main App thoát hoàn toàn để mở khóa file binary; `updater.exe` thực hiện sao lưu `.bak`, giải nén ghi đè, xác thực SHA-256 và khởi động lại Main App mới.
-   - Cơ chế Rollback tự động khôi phục bản cũ nếu phiên bản mới bị lỗi hoặc lệch mã băm SHA-256.
+7. **ADR-007: Động Cơ Khớp File Thông Minh 3 Tầng (Zero Wrong-Vendor Delivery)**:
+   - Khớp file đính kèm (từ chọn thư mục hoặc kéo-thả) theo 3 tầng cứng:
+     - **Xanh (`AUTO_READY`)**: Chỉ khớp 100% Word-Boundary Token tên NCC/Alias (chuẩn hóa NFC, hoa/thường, tháng `9`<->`09`, dấu phân cách) + đúng kỳ tháng/năm.
+     - **Vàng (`NEEDS_REVIEW` — mặc định KHÔNG tick gửi)**: Mọi khớp gần đúng (fuzzy) bắt buộc người dùng đối chiếu và bấm duyệt từng dòng.
+     - **Đỏ (`BLOCKED`)**: >=2 file cho 1 NCC, 1 file khớp >=2 NCC, chứa tên NCC khác, lệch kỳ tháng/năm, file rác `~$*`, trùng email chéo NCC.
+   - Bất biến Song ánh 1–1 (path + `SHA-256`) và **TOCTOU Hash Pinning** trước khi gửi SMTP.

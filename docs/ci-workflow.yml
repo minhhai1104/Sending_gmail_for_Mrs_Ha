@@ -1,0 +1,36 @@
+name: CI Quality Gate & Windows Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  verify-and-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint & Security Static Check (ruff)
+        run: python -m ruff check app tests scripts main.py updater_runner.py
+
+      - name: Strict Type Check (mypy)
+        run: python -m mypy app main.py updater_runner.py
+
+      - name: Run 3-Pronged Test Suite (pytest + coverage)
+        run: python -m pytest -v --cov --cov-fail-under=85
+
+      - name: Build Windows Executable (--onedir + updater.exe)
+        run: python scripts/build_exe.py --no-installer

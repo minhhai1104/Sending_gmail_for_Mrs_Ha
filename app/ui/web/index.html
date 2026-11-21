@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' data:; connect-src 'none';" />
+  <title>Gmail Auto Mailer — Haesung Vina</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Full-window Drag & Drop overlay -->
+  <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
+    <div class="drop-overlay-card">
+      <svg class="icon-xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <h3>Thả thư mục hoặc tệp báo cáo vào đây</h3>
+      <p>Ứng dụng tự động nhận diện tháng/năm, chế độ Tạm tính hay Chốt và khớp an toàn vào từng nhà cung cấp.</p>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="m3 7 9 6 9-6"/></svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">Haesung Mailer</div>
+          <div class="brand-ver" id="sidebar-version">v3.1.0</div>
+        </div>
+      </div>
+
+      <nav class="nav-list" aria-label="Điều hướng chính">
+        <button class="nav-item active" data-page="send">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          <span>Gửi Mail</span>
+          <span class="nav-badge hidden" id="nav-badge-send">0</span>
+        </button>
+        <button class="nav-item" data-page="suppliers">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Nhà cung cấp</span>
+          <span class="nav-count" id="nav-count-suppliers">0</span>
+        </button>
+        <button class="nav-item" data-page="templates">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>Mẫu Email</span>
+        </button>
+        <button class="nav-item" data-page="history">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Lịch sử gửi</span>
+        </button>
+        <button class="nav-item" data-page="settings">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 0 1 0 4h-.09c-.66 0-1.25.4-1.51 1z"/></svg>
+          <span>Cài đặt</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="sidebar-gmail-pill" class="gmail-pill" title="Kiểm tra hoặc đổi tài khoản Gmail">
+          <span class="status-dot" id="gmail-status-dot"></span>
+          <div class="gmail-pill-info">
+            <div class="gmail-pill-title" id="gmail-pill-title">Chưa kết nối Gmail</div>
+            <div class="gmail-pill-sub" id="gmail-pill-sub">Bấm để thiết lập nhanh</div>
+          </div>
+        </button>
+
+        <div class="sidebar-quick-row">
+          <button id="btn-quick-theme" class="btn btn-ghost btn-sm" title="Chuyển giao diện Sáng / Tối">
+            <svg id="theme-icon-svg" class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <span id="theme-toggle-label">Tối</span>
+          </button>
+          <button id="btn-open-wizard" class="btn btn-ghost btn-sm" title="Mở lại trợ lý thiết lập nhanh 3 bước">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Thiết lập</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-area">
+      <!-- OTA Update Banner -->
+      <div id="ota-banner" class="ota-banner hidden">
+        <div class="ota-banner-left">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span id="ota-banner-text">Đã có phiên bản mới!</span>
+        </div>
+        <div class="ota-banner-actions">
+          <span id="ota-progress-text" class="tabular hidden">0%</span>
+          <button id="btn-ota-install" class="btn btn-light btn-sm">Cập nhật ngay</button>
+          <button id="btn-ota-dismiss" class="btn btn-icon-light" aria-label="Đóng thông báo">×</button>
+        </div>
+      </div>
+
+      <!-- ==================== PAGE 1: SEND WORKSPACE ==================== -->
+      <section id="page-send" class="page active">
+        <header class="page-header compact-header">
+          <div class="header-title-group">
+            <h1>Gửi báo cáo nhà cung cấp</h1>
+            <span id="period-reason-chip" class="subtle-chip hidden"></span>
+          </div>
+
+          <div class="period-controls">
+            <div class="field-inline">
+              <label for="ws-month">Tháng</label>
+              <select id="ws-month" class="input input-sm">
+                <option value="1">01</option><option value="2">02</option><option value="3">03</option>
+                <option value="4">04</option><option value="5">05</option><option value="6">06</option>
+                <option value="7">07</option><option value="8">08</option><option value="9">09</option>
+                <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+              </select>
+            </div>
+            <div class="field-inline">
+              <label for="ws-year">Năm</label>
+              <input id="ws-year" type="number" class="input input-sm input-year tabular" min="2020" max="2100" value="2026" />
+            </div>
+            <div class="segmented" role="group" aria-label="Chế độ gửi">
+              <button type="button" class="seg-btn active" data-kind="Tạm tính">Tạm tính <span class="seg-sub">Excel</span></button>
+              <button type="button" class="seg-btn" data-kind="Chốt">Chốt <span class="seg-sub">Excel + PDF</span></button>
+            </div>
+          </div>
+        </header>
+
+        <!-- Smart Source Dropzone Strip -->
+        <div id="source-strip" class="source-strip">
+          <div class="source-strip-info">
+            <div class="source-icon-wrap">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <div>
+              <div class="source-title" id="source-title">Kéo thả thư mục hoặc tệp Excel / PDF vào đây</div>
+              <div class="source-sub" id="source-sub">Hoặc bấm chọn thư mục báo cáo tháng — ứng dụng tự động khớp an toàn vào từng nhà cung cấp.</div>
+            </div>
+          </div>
+          <div class="source-strip-actions">
+            <button id="btn-pick-folder" class="btn btn-secondary btn-sm">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Chọn thư mục
+            </button>
+            <button id="btn-pick-files" class="btn btn-secondary btn-sm">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Chọn file rời
+            </button>
+            <button id="btn-refresh-ws" class="btn btn-ghost btn-sm" title="Quét lại trạng thái">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Contextual Alerts (Gmail missing / Duplicate emails / Auto-Discovery / Partial PDF) -->
+        <div id="ws-alerts" class="alert-stack"></div>
+
+        <!-- Split Master-Detail Workspace -->
+        <div class="split-workspace">
+          <!-- LEFT: Supplier Queue -->
+          <div class="card queue-panel">
+            <div class="queue-toolbar">
+              <div class="kpi-pills" id="ws-kpi-pills">
+                <button type="button" class="kpi-pill active" data-filter="all">Tất cả <span class="tabular" id="kpi-all">0</span></button>
+                <button type="button" class="kpi-pill pill-ok" data-filter="ready">Sẵn sàng <span class="tabular" id="kpi-ready">0</span></button>
+                <button type="button" class="kpi-pill pill-err" data-filter="attention">Cần xử lý <span class="tabular" id="kpi-attention">0</span></button>
+                <button type="button" class="kpi-pill pill-info" data-filter="sent">Đã gửi <span class="tabular" id="kpi-sent">0</span></button>
+              </div>
+              <div class="queue-search-row">
+                <div class="search-wrap">
+                  <label for="ws-search" class="visually-hidden">Tìm kiếm nhà cung cấp hoặc email</label>
+                  <svg class="icon-sm search-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="ws-search" type="search" class="input input-sm search-input" placeholder="Tìm nhà cung cấp, email... (Ctrl+F)" />
+                </div>
+                <span id="ws-visible-count" class="queue-count-meta tabular" aria-live="polite"></span>
+                <button type="button" id="btn-select-all-valid" class="btn btn-ghost btn-xs">Chọn hợp lệ</button>
+                <button type="button" id="btn-deselect-all" class="btn btn-ghost btn-xs">Bỏ chọn</button>
+              </div>
+            </div>
+
+            <div id="ws-queue-wrap" class="queue-table-wrap" tabindex="0" role="region" aria-labelledby="ws-queue-caption">
+              <table id="ws-queue-table" class="queue-table">
+                <caption id="ws-queue-caption" class="visually-hidden">Danh sách nhà cung cấp kỳ gửi</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" class="qt-col-chk">
+                      <input id="ws-check-all" type="checkbox" class="queue-check" aria-label="Chọn tất cả nhà cung cấp hợp lệ đang hiển thị" />
+                    </th>
+                    <th scope="col" class="qt-col-name" data-sort="name" data-type="text">
+                      <button type="button" class="qt-sort-btn">
+                        <span>Nhà cung cấp</span>
+                        <svg class="qt-sort-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                          <path class="sort-up" d="M4.5 6.5 8 3l3.5 3.5"/>
+                          <path class="sort-down" d="M4.5 9.5 8 13l3.5-3.5"/>
+                        </svg>
+                      </button>
+                    </th>
+                    <th scope="col" class="qt-col-ind">Email</th>
+                    <th scope="col" class="qt-col-ind">Excel</th>
+                    <th scope="col" class="qt-col-ind qt-col-pdf hidden" id="qt-th-pdf">PDF</th>
+                    <th scope="col" class="qt-col-status" data-sort="status" data-type="number">
+                      <button type="button" class="qt-sort-btn qt-sort-right">
+                        <span>Trạng thái</span>
+                        <svg class="qt-sort-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                          <path class="sort-up" d="M4.5 6.5 8 3l3.5 3.5"/>
+                          <path class="sort-down" d="M4.5 9.5 8 13l3.5-3.5"/>
+                        </svg>
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="ws-queue-body"></tbody>
+              </table>
+              <div id="ws-queue-empty" class="empty-state hidden">
+                <h2>Không có nhà cung cấp nào khớp bộ lọc</h2>
+                <p>Thử xóa từ khóa tìm kiếm hoặc chuyển sang tab "Tất cả".</p>
+              </div>
+            </div>
+            <div id="ws-sort-status" class="visually-hidden" role="status"></div>
+          </div>
+
+          <!-- RIGHT: Live HTML Email Inspector -->
+          <div class="card inspector-panel">
+            <div id="inspector-empty" class="empty-state">
+              <svg class="icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              <h2>Chọn một nhà cung cấp để xem trước email</h2>
+              <p>Khung này hiển thị đúng 100% nội dung HTML, chữ ký và logo mà đối tác sẽ nhận được trong hộp thư Gmail.</p>
+            </div>
+
+            <div id="inspector-content" class="inspector-content hidden">
+              <div class="inspector-meta">
+                <div class="inspector-head-row">
+                  <h2 id="insp-supplier-name">ACE</h2>
+                  <div class="inspector-head-actions">
+                    <button id="btn-insp-edit-sup" class="btn btn-ghost btn-xs">Sửa email</button>
+                    <div class="mini-tabs">
+                      <button type="button" class="mini-tab active" data-pmode="html">HTML thật</button>
+                      <button type="button" class="mini-tab" data-pmode="text">Văn bản</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="meta-grid">
+                  <div class="meta-label">Từ</div>
+                  <div class="meta-val" id="insp-from"></div>
+                  <div class="meta-label">Đến</div>
+                  <div class="meta-val" id="insp-to"></div>
+                  <div class="meta-label hidden" id="insp-cc-label">CC</div>
+                  <div class="meta-val hidden" id="insp-cc"></div>
+                  <div class="meta-label">Tiêu đề</div>
+                  <div class="meta-val meta-subject" id="insp-subject"></div>
+                </div>
+
+                <!-- Errors & Warnings for selected supplier -->
+                <div id="insp-notices" class="insp-notices"></div>
+
+                <!-- Attachment cards -->
+                <div class="insp-attachments-wrap">
+                  <div class="insp-att-header">
+                    <span>Tệp đính kèm</span>
+                    <span class="tabular text-muted" id="insp-total-size"></span>
+                  </div>
+                  <div id="insp-attachments" class="insp-att-list"></div>
+                </div>
+              </div>
+
+              <!-- Sandboxed 1:1 Real HTML Preview -->
+              <div class="preview-frame-wrap">
+                <iframe id="send-preview-frame" class="preview-iframe" sandbox="" title="Xem trước Email HTML"></iframe>
+                <pre id="send-preview-text" class="preview-plaintext hidden"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sticky Bottom Action Bar -->
+        <footer class="action-bar">
+          <div class="action-bar-left">
+            <label class="checkbox-inline">
+              <input id="chk-skip-sent" type="checkbox" checked />
+              <span>Bỏ qua NCC đã gửi trong kỳ</span>
+            </label>
+            <span class="divider-dot">•</span>
+            <span id="action-summary" class="action-summary tabular">Đã chọn 0 mail</span>
+          </div>
+          <div class="action-bar-right">
+            <button id="btn-retry-failed-bar" class="btn btn-warn btn-sm hidden">Gửi lại nhà bị lỗi</button>
+            <button id="btn-send-test" class="btn btn-secondary">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              Gửi thử cho tôi
+            </button>
+            <button id="btn-send-now" class="btn btn-primary" disabled>
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <span id="btn-send-now-label">Gửi ngay (0 mail)</span>
+            </button>
+          </div>
+        </footer>
+      </section>
+
+      <!-- ==================== PAGE 2: SUPPLIERS ==================== -->
+      <section id="page-suppliers" class="page">
+        <header class="page-header">
+          <div>
+            <h1>Danh bạ nhà cung cấp</h1>
+            <p class="page-sub">Quản lý trực tiếp trong ứng dụng — không cần mở file Excel cấu hình.</p>
+          </div>
+          <button id="btn-add-supplier" class="btn btn-primary">
+            <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Thêm nhà cung cấp
+          </button>
+        </header>
+
+        <div id="sup-dup-alert" class="alert alert-warn hidden"></div>
+
+        <div class="card table-card">
+          <div class="table-toolbar">
+            <div class="search-wrap">
+              <svg class="icon-sm search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="sup-search" type="search" class="input input-sm search-input" placeholder="Tìm theo tên NCC hoặc email..." />
+            </div>
+            <div class="segmented" id="sup-filter-seg">
+              <button type="button" class="seg-btn active" data-sfilter="all">Tất cả</button>
+              <button type="button" class="seg-btn" data-sfilter="enabled">Đang bật</button>
+              <button type="button" class="seg-btn" data-sfilter="missing_email">Chưa có email</button>
+            </div>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 72px;">Gửi?</th>
+                  <th style="width: 220px;">Nhà cung cấp &amp; Bí danh</th>
+                  <th>Địa chỉ Email người nhận</th>
+                  <th style="width: 180px;">Ghi chú</th>
+                  <th style="width: 110px; text-align: right;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="sup-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== PAGE 3: TEMPLATE STUDIO ==================== -->
+      <section id="page-templates" class="page">
+        <header class="page-header">
+          <div>
+            <h1>Mẫu Email &amp; Chữ ký doanh nghiệp</h1>
+            <p class="page-sub">Bấm nút biến để chèn tự động — xem trước giao diện HTML thật kèm logo ngay bên phải.</p>
+          </div>
+          <div class="header-actions">
+            <button id="btn-tpl-reset" class="btn btn-secondary">Khôi phục mặc định</button>
+            <button id="btn-tpl-save" class="btn btn-primary">Lưu mẫu email</button>
+          </div>
+        </header>
+
+        <div class="template-split">
+          <div class="card tpl-editor-card">
+            <div class="var-chip-bar">
+              <span class="var-chip-label">Chèn nhanh biến:</span>
+              <button type="button" class="var-chip" data-token="{thang}">+ Tháng</button>
+              <button type="button" class="var-chip" data-token="{nam}">+ Năm</button>
+              <button type="button" class="var-chip" data-token="{nha_cung_cap}">+ Tên NCC</button>
+              <button type="button" class="var-chip" data-token="{loai}">+ Loại gửi</button>
+            </div>
+
+            <div class="form-group">
+              <label for="tpl-subject">Tiêu đề email</label>
+              <input id="tpl-subject" type="text" class="input" />
+            </div>
+
+            <div class="form-group">
+              <label for="tpl-body">Nội dung thư &amp; Chữ ký <span class="label-hint">(Dùng dòng <code>---</code> để ngăn cách phần chữ ký doanh nghiệp)</span></label>
+              <textarea id="tpl-body" class="input textarea" rows="10"></textarea>
+            </div>
+
+            <div class="logo-card">
+              <div class="logo-thumb-box" id="tpl-logo-thumb">
+                <span class="text-muted">Chưa có logo</span>
+              </div>
+              <div class="logo-card-info">
+                <div class="logo-card-title">Logo công ty trong chữ ký</div>
+                <div class="logo-card-sub">Hỗ trợ PNG, JPG, WEBP (&lt; 2 MB). Tự động nhúng chuẩn Inline CID vào mọi email gửi đi.</div>
+                <div class="logo-card-btns">
+                  <button id="btn-pick-logo" type="button" class="btn btn-secondary btn-sm">Chọn ảnh logo</button>
+                  <button id="btn-clear-logo" type="button" class="btn btn-ghost btn-sm hidden">Gỡ logo</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="pattern-grid">
+              <div class="form-group">
+                <label for="tpl-excel">Mẫu tên file Excel</label>
+                <input id="tpl-excel" type="text" class="input input-sm" />
+                <div class="field-example">Ví dụ: <span id="tpl-excel-example"></span></div>
+              </div>
+              <div class="form-group">
+                <label for="tpl-pdf">Mẫu tên file PDF (chế độ Chốt)</label>
+                <input id="tpl-pdf" type="text" class="input input-sm" />
+                <div class="field-example">Ví dụ: <span id="tpl-pdf-example"></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card tpl-preview-card">
+            <div class="tpl-preview-head">
+              <div>
+                <div class="section-title">Xem trước HTML trực tiếp (1:1)</div>
+                <div class="tpl-preview-subj" id="tpl-preview-subject"></div>
+              </div>
+              <select id="tpl-preview-sample-sup" class="input input-sm" style="width: 140px;"></select>
+            </div>
+            <div class="preview-frame-wrap">
+              <iframe id="tpl-preview-frame" class="preview-iframe" sandbox="" title="Xem trước mẫu email"></iframe>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== PAGE 4: HISTORY ==================== -->
+      <section id="page-history" class="page">
+        <header class="page-header">
+          <div>
+            <h1>Lịch sử gửi email</h1>
+            <p class="page-sub">Lưu trữ an toàn trong SQLite nội bộ — tra cứu tức thì không bao giờ bị khóa file Excel.</p>
+          </div>
+          <div class="header-actions">
+            <button id="btn-hist-retry" class="btn btn-warn hidden">Đưa NCC lỗi về gửi lại</button>
+            <button id="btn-hist-export" class="btn btn-secondary">
+              <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Xuất báo cáo Excel
+            </button>
+          </div>
+        </header>
+
+        <div class="kpi-grid-4">
+          <div class="card kpi-card"><div class="kpi-label">Tổng lượt gửi</div><div class="kpi-value tabular" id="hist-kpi-total">0</div></div>
+          <div class="card kpi-card"><div class="kpi-label">Thành công</div><div class="kpi-value tabular text-ok" id="hist-kpi-ok">0</div></div>
+          <div class="card kpi-card"><div class="kpi-label">Bị lỗi</div><div class="kpi-value tabular text-err" id="hist-kpi-fail">0</div></div>
+          <div class="card kpi-card"><div class="kpi-label">Tỷ lệ đạt</div><div class="kpi-value tabular" id="hist-kpi-rate">0%</div></div>
+        </div>
+
+        <div class="card table-card">
+          <div class="table-toolbar">
+            <div class="filter-row">
+              <select id="hist-month" class="input input-sm">
+                <option value="all">Mọi tháng</option>
+                <option value="1">Tháng 01</option><option value="2">Tháng 02</option><option value="3">Tháng 03</option>
+                <option value="4">Tháng 04</option><option value="5">Tháng 05</option><option value="6">Tháng 06</option>
+                <option value="7">Tháng 07</option><option value="8">Tháng 08</option><option value="9">Tháng 09</option>
+                <option value="10">Tháng 10</option><option value="11">Tháng 11</option><option value="12">Tháng 12</option>
+              </select>
+              <input id="hist-year" type="number" class="input input-sm input-year tabular" placeholder="Năm" />
+              <select id="hist-kind" class="input input-sm">
+                <option value="">Mọi chế độ</option>
+                <option value="Tạm tính">Tạm tính</option>
+                <option value="Chốt">Chốt</option>
+              </select>
+              <select id="hist-status" class="input input-sm">
+                <option value="">Mọi trạng thái</option>
+                <option value="Thành công">Thành công</option>
+                <option value="Lỗi">Lỗi</option>
+              </select>
+            </div>
+            <div class="search-wrap">
+              <svg class="icon-sm search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="hist-search" type="search" class="input input-sm search-input" placeholder="Tìm nhà cung cấp, email, chi tiết..." />
+            </div>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 150px;">Thời gian</th>
+                  <th style="width: 90px;">Kỳ gửi</th>
+                  <th style="width: 95px;">Chế độ</th>
+                  <th style="width: 140px;">Nhà cung cấp</th>
+                  <th>Người nhận &amp; Tệp đính kèm</th>
+                  <th style="width: 115px;">Kết quả</th>
+                  <th style="width: 210px;">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody id="hist-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== PAGE 5: SETTINGS ==================== -->
+      <section id="page-settings" class="page">
+        <header class="page-header">
+          <div>
+            <h1>Cài đặt &amp; Tài khoản</h1>
+            <p class="page-sub">Mọi mật khẩu được mã hóa trực tiếp bằng Windows DPAPI trên máy tính của bạn.</p>
+          </div>
+        </header>
+
+        <div class="settings-grid">
+          <!-- Card 1: Gmail Account & DPAPI Security (Write-Only) -->
+          <div class="card settings-card">
+            <div class="card-head">
+              <h2>Tài khoản Gmail &amp; Bảo mật</h2>
+              <span id="set-dpapi-badge" class="badge badge-muted">Chưa lưu mật khẩu</span>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="set-sender">Địa chỉ Gmail dùng để gửi</label>
+                <input id="set-sender" type="email" class="input" placeholder="ten.ban@gmail.com" />
+              </div>
+              <div class="form-group">
+                <label for="set-display-name">Tên hiển thị khi đối tác nhận mail</label>
+                <input id="set-display-name" type="text" class="input" placeholder="Ms. Ngoc Ha - Haesung Vina" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="label-between">
+                <label for="set-app-password">Mật khẩu ứng dụng Google (16 ký tự)</label>
+                <button type="button" class="link-btn" data-ext="google_app_password">Mở trang lấy mật khẩu Google ↗</button>
+              </div>
+              <div class="password-input-wrap">
+                <input id="set-app-password" type="password" class="input" autocomplete="new-password" placeholder="Để trống nếu muốn giữ nguyên mật khẩu đã lưu bảo mật..." />
+                <button type="button" id="btn-toggle-pw-vis" class="btn-eye" aria-label="Ẩn hiện mật khẩu đang gõ">Hiện</button>
+              </div>
+              <div class="field-hint" id="set-pw-hint">Bắt buộc dùng App Password 16 ký tự (không phải mật khẩu đăng nhập Gmail thường). Ứng dụng không bao giờ hiển thị lại mật khẩu đã lưu.</div>
+            </div>
+
+            <div class="card-actions">
+              <button id="btn-set-save-gmail" class="btn btn-primary">Kiểm tra &amp; Lưu Gmail</button>
+              <button id="btn-set-test-gmail" class="btn btn-secondary">Kiểm tra kết nối</button>
+              <button id="btn-set-clear-pw" class="btn btn-ghost text-err">Xóa mật khẩu</button>
+            </div>
+          </div>
+
+          <!-- Card 2: CC, Default Folder & Pacing -->
+          <div class="card settings-card">
+            <div class="card-head">
+              <h2>CC chung, Thư mục &amp; Chống Spam</h2>
+            </div>
+
+            <div class="form-group">
+              <label for="set-cc">Email nhận bản sao (CC chung cho mọi mail gửi đi)</label>
+              <input id="set-cc" type="text" class="input" placeholder="sep@haesung.vn; ketoan@haesung.vn (không bắt buộc)" />
+            </div>
+
+            <div class="form-group">
+              <label for="set-attach-dir">Thư mục lưu báo cáo mặc định</label>
+              <div class="input-with-btn">
+                <input id="set-attach-dir" type="text" class="input" readonly />
+                <button id="btn-pick-default-dir" type="button" class="btn btn-secondary">Chọn thư mục</button>
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="set-pacing">Giãn cách giữa các mail (giây): <strong id="set-pacing-val" class="tabular">1.8s</strong></label>
+                <input id="set-pacing" type="range" min="0.5" max="5.0" step="0.1" value="1.8" class="range-input" />
+                <div class="field-hint">Khuyến nghị 1.5–3.0 giây để Gmail không đánh dấu spam.</div>
+              </div>
+              <div class="form-group">
+                <label for="set-retries">Tự thử lại khi rớt mạng tạm thời</label>
+                <select id="set-retries" class="input">
+                  <option value="0">Không thử lại (0 lần)</option>
+                  <option value="1">1 lần</option>
+                  <option value="2" selected>2 lần (Khuyến nghị)</option>
+                  <option value="3">3 lần</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="card-actions">
+              <button id="btn-set-save-general" class="btn btn-primary">Lưu cài đặt</button>
+            </div>
+          </div>
+
+          <!-- Card 3: Theme, OTA Update & Advanced IT -->
+          <div class="card settings-card">
+            <div class="card-head">
+              <h2>Giao diện &amp; Cập nhật tự động</h2>
+              <span class="badge badge-info" id="set-version-badge">v3.1.0</span>
+            </div>
+
+            <div class="form-group">
+              <label>Chế độ hiển thị</label>
+              <div class="segmented" id="set-theme-seg">
+                <button type="button" class="seg-btn" data-theme-choice="light">Sáng</button>
+                <button type="button" class="seg-btn" data-theme-choice="dark">Tối</button>
+                <button type="button" class="seg-btn active" data-theme-choice="system">Theo Windows</button>
+              </div>
+            </div>
+
+            <div class="ota-settings-row">
+              <div>
+                <div class="logo-card-title">Cập nhật tự động qua GitHub Releases</div>
+                <div class="field-hint">Dữ liệu cấu hình, mật khẩu và lịch sử gửi được bảo toàn 100% khi nâng cấp.</div>
+              </div>
+              <button id="btn-check-ota" class="btn btn-secondary">Kiểm tra cập nhật</button>
+            </div>
+
+            <details class="advanced-accordion">
+              <summary>Cấu hình nâng cao (Dành cho Quản trị IT)</summary>
+              <div class="advanced-body">
+                <div class="form-group">
+                  <label for="set-gh-token">GitHub Personal Access Token (nếu kho cập nhật để Private)</label>
+                  <div class="input-with-btn">
+                    <input id="set-gh-token" type="password" class="input input-sm" autocomplete="new-password" placeholder="Để trống nếu dùng kho Public..." />
+                    <button id="btn-save-gh-token" type="button" class="btn btn-secondary btn-sm">Lưu Token</button>
+                  </div>
+                  <div class="field-hint" id="set-gh-hint">Token được mã hóa bằng Windows DPAPI và không hiển thị lại.</div>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== FIRST-RUN ONBOARDING WIZARD (60s) ==================== -->
+  <div id="wizard-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="wiz-title">
+    <div class="modal-card wizard-card">
+      <div class="wizard-header">
+        <div>
+          <h2 id="wiz-title">Thiết lập nhanh trong 60 giây</h2>
+          <p class="page-sub">Chỉ cần làm 1 lần duy nhất — không cần mở file Excel hay đọc tài liệu hướng dẫn.</p>
+        </div>
+        <button id="btn-wiz-close" class="btn btn-ghost btn-sm">Để sau</button>
+      </div>
+
+      <div class="wizard-steps">
+        <div class="wiz-step active" data-step="1"><span>1</span> Kết nối Gmail</div>
+        <div class="wiz-step" data-step="2"><span>2</span> Email Nhà cung cấp</div>
+        <div class="wiz-step" data-step="3"><span>3</span> Chữ ký &amp; Logo</div>
+      </div>
+
+      <!-- Step 1 -->
+      <div class="wiz-pane active" data-pane="1">
+        <div class="wiz-two-col">
+          <div>
+            <div class="form-group">
+              <label for="wiz-sender">Địa chỉ Gmail gửi báo cáo</label>
+              <input id="wiz-sender" type="email" class="input" placeholder="ten.ban@gmail.com" />
+            </div>
+            <div class="form-group">
+              <label for="wiz-name">Tên hiển thị người gửi</label>
+              <input id="wiz-name" type="text" class="input" placeholder="Ms. Ngoc Ha - Haesung Vina" />
+            </div>
+            <div class="form-group">
+              <label for="wiz-password">Mật khẩu ứng dụng Google (16 ký tự)</label>
+              <div class="password-input-wrap">
+                <input id="wiz-password" type="password" class="input" autocomplete="new-password" placeholder="xxxx xxxx xxxx xxxx" />
+                <button type="button" id="btn-wiz-eye" class="btn-eye">Hiện</button>
+              </div>
+              <div class="field-hint" id="wiz-pw-status">Dán 16 ký tự từ Google (có dấu cách cũng được, app tự lọc).</div>
+            </div>
+            <div id="wiz-step1-msg" class="inline-feedback hidden"></div>
+          </div>
+
+          <div class="guide-box">
+            <div class="guide-box-title">Cách lấy Mật khẩu ứng dụng (30 giây)</div>
+            <ol class="guide-ol">
+              <li>Bật <strong>Xác minh 2 bước</strong> trong tài khoản Google.</li>
+              <li>Mở trang <strong>Mật khẩu ứng dụng</strong>, đặt tên <em>Haesung Mailer</em> rồi bấm <strong>Tạo</strong>.</li>
+              <li>Sao chép chuỗi <strong>16 ký tự</strong> Google hiển thị và dán sang ô bên trái.</li>
+            </ol>
+            <div class="guide-links">
+              <button type="button" class="btn btn-secondary btn-sm" data-ext="google_2fa">1. Bật Xác minh 2 bước ↗</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-ext="google_app_password">2. Lấy Mật khẩu 16 ký tự ↗</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="wiz-pane" data-pane="2">
+        <p class="page-sub" style="margin-bottom: 10px;">Nhập nhanh email người nhận cho các nhà cung cấp chính (nhiều email cách nhau bằng dấu <code>;</code>). Bạn có thể bổ sung thêm sau ở mục Nhà cung cấp.</p>
+        <div id="wiz-suppliers-list" class="wiz-sup-list"></div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="wiz-pane" data-pane="3">
+        <div class="wiz-two-col">
+          <div>
+            <div class="form-group">
+              <label>Logo công ty (không bắt buộc)</label>
+              <div class="logo-card compact">
+                <div class="logo-thumb-box" id="wiz-logo-thumb"><span class="text-muted">Chưa chọn</span></div>
+                <div class="logo-card-btns">
+                  <button type="button" id="btn-wiz-pick-logo" class="btn btn-secondary btn-sm">Chọn ảnh logo</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="wiz-body">Mẫu nội dung &amp; Chữ ký</label>
+              <textarea id="wiz-body" class="input textarea" rows="8"></textarea>
+            </div>
+          </div>
+          <div class="wiz-preview-col">
+            <div class="section-title" style="margin-bottom: 8px;">Xem trước email khách hàng sẽ nhận</div>
+            <iframe id="wiz-preview-frame" class="preview-iframe" sandbox="" title="Xem trước chữ ký"></iframe>
+          </div>
+        </div>
+      </div>
+
+      <div class="wizard-footer">
+        <button id="btn-wiz-back" class="btn btn-secondary hidden">Quay lại</button>
+        <div class="spacer"></div>
+        <button id="btn-wiz-next" class="btn btn-primary">Kiểm tra Gmail &amp; Tiếp tục</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SUPPLIER SLIDE-OVER DRAWER ==================== -->
+  <div id="supplier-drawer" class="drawer-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <h2 id="sup-drawer-title">Thêm nhà cung cấp</h2>
+        <button id="btn-sup-drawer-close" class="btn btn-ghost btn-sm">Đóng</button>
+      </div>
+      <div class="drawer-body">
+        <input type="hidden" id="sup-edit-id" />
+        <div class="form-group">
+          <label for="sup-edit-name">Tên nhà cung cấp</label>
+          <input id="sup-edit-name" type="text" class="input" placeholder="Ví dụ: ACE, HR Partner..." />
+        </div>
+        <div class="form-group">
+          <label for="sup-edit-recipients">Email người nhận <span class="label-hint">(Nhiều email cách nhau bằng dấu ; hoặc xuống dòng)</span></label>
+          <textarea id="sup-edit-recipients" class="input textarea" rows="3" placeholder="ketoan@ncc.vn; quanly@ncc.vn"></textarea>
+          <div id="sup-edit-email-chips" class="chip-preview-row"></div>
+        </div>
+        <div class="form-group">
+          <label for="sup-edit-aliases">Bí danh / Tên viết tắt trong tên file <span class="label-hint">(Không bắt buộc, cách nhau bằng dấu phẩy)</span></label>
+          <input id="sup-edit-aliases" type="text" class="input" placeholder="Ví dụ: HRP, HR_Partner" />
+        </div>
+        <div class="form-group">
+          <label for="sup-edit-note">Ghi chú nội bộ</label>
+          <input id="sup-edit-note" type="text" class="input" placeholder="Người phụ trách, lưu ý riêng..." />
+        </div>
+        <label class="checkbox-inline">
+          <input id="sup-edit-enabled" type="checkbox" checked />
+          <span>Bật gửi cho nhà cung cấp này</span>
+        </label>
+        <div id="sup-edit-error" class="inline-feedback err hidden"></div>
+      </div>
+      <div class="drawer-footer">
+        <button id="btn-sup-drawer-cancel" class="btn btn-secondary">Hủy</button>
+        <button id="btn-sup-drawer-save" class="btn btn-primary">Lưu nhà cung cấp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== LIVE DISPATCH TELEMETRY DRAWER ==================== -->
+  <div id="dispatch-drawer" class="dispatch-overlay hidden" role="dialog" aria-modal="true">
+    <div class="dispatch-card">
+      <div class="dispatch-head">
+        <div>
+          <h2 id="disp-title">Đang gửi email cho nhà cung cấp...</h2>
+          <p class="page-sub" id="disp-subtitle">Đang khởi tạo phiên kết nối bảo mật Gmail SMTP...</p>
+        </div>
+        <div class="dispatch-controls">
+          <button id="btn-disp-pause" class="btn btn-secondary btn-sm">Tạm dừng</button>
+          <button id="btn-disp-cancel" class="btn btn-danger btn-sm">Hủy gửi</button>
+          <button id="btn-disp-retry" class="btn btn-warn btn-sm hidden">Gửi lại nhà bị lỗi</button>
+          <button id="btn-disp-close" class="btn btn-primary btn-sm hidden">Hoàn tất</button>
+        </div>
+      </div>
+
+      <div class="progress-track">
+        <div id="disp-progress-fill" class="progress-fill" style="width: 0%;"></div>
+      </div>
+
+      <div class="kpi-grid-4 compact-kpi">
+        <div class="kpi-mini"><div class="kpi-label">Tiến độ</div><div class="kpi-mini-val tabular" id="disp-kpi-progress">0/0 (0%)</div></div>
+        <div class="kpi-mini"><div class="kpi-label">Tốc độ thực tế</div><div class="kpi-mini-val tabular" id="disp-kpi-rate">0.0 mail/phút</div></div>
+        <div class="kpi-mini"><div class="kpi-label">Ước tính còn lại</div><div class="kpi-mini-val tabular" id="disp-kpi-eta">--</div></div>
+        <div class="kpi-mini"><div class="kpi-label">Thành công / Lỗi</div><div class="kpi-mini-val tabular"><span class="text-ok" id="disp-kpi-ok">0</span> / <span class="text-err" id="disp-kpi-fail">0</span></div></div>
+      </div>
+
+      <div id="disp-feed" class="disp-feed"></div>
+    </div>
+  </div>
+
+  <!-- ==================== CONFIRMATION MODAL ==================== -->
+  <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card confirm-card">
+      <h2 id="confirm-title">Xác nhận</h2>
+      <div id="confirm-body" class="confirm-body"></div>
+      <div id="confirm-actions" class="confirm-actions"></div>
+    </div>
+  </div>
+
+  <!-- TOAST STACK -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
